@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ibeat-rsfseg"
+version = "0.0.0"
+dependencies = [
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
