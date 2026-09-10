@@ -30,13 +30,13 @@ ALL_VIEWS = {
 VIEWS_TO_SHOW = [1]
 
 
-def run(build, logfile, organs=None):
+def run(build, logfile):
 
     mask_task = 'rsf_masks'   
 
     datapath = os.path.join(build, 'dixon', 'stage_5_clean_dixon_data')
-    maskpath = os.path.join(build, 'rsfseg_testing', 'stage_1_segment')
-    displaypath = os.path.join(build, 'rsfseg_testing', 'stage_2_display')
+    maskpath = os.path.join(build, 'rsfseg', 'stage_1_segment')
+    displaypath = os.path.join(build, 'rsfseg', 'stage_2_display')
 
     # Controls
     group = "Controls"
@@ -44,7 +44,7 @@ def run(build, logfile, organs=None):
     sitemaskpath = os.path.join(maskpath, group)
     sitedisplaypath = os.path.join(displaypath, group)
 
-    run_site(sitedatapath, sitemaskpath, sitedisplaypath, organs, task=mask_task)
+    run_site(sitedatapath, sitemaskpath, sitedisplaypath, task=mask_task)
 
     group = "Patients"
     for site in ['Exeter', 'Bari', 'Leeds', 'Bordeaux', 'Turku', 'Sheffield']:
@@ -52,7 +52,7 @@ def run(build, logfile, organs=None):
         sitemaskpath = os.path.join(maskpath, group, site)
         sitedisplaypath = os.path.join(displaypath, group, site)
 
-        run_site(sitedatapath, sitemaskpath, sitedisplaypath, organs, task=mask_task)
+        run_site(sitedatapath, sitemaskpath, sitedisplaypath, task=mask_task)
 
 
 def _mask_slice_range(mask_arr, axis=2, pad=2):
@@ -159,13 +159,6 @@ if __name__ == '__main__':
     # Call like this for one kidney specifically
     # python src/rsfseg/stage_2_display.py --build=C:\Users\...\iBEAt_Build --organs left_kidney_sinus_fat
 
-    BUILD = r"X:\abdominal_imaging\Shared\Benthe"
-    kwargs = {
-        "organs": {
-            "type": str,
-            "default": None,
-            "nargs": "+",
-            "help": "Organs (left_kidney_sinus_fat / right_kidney_sinus_fat)",
-        }
-    }
-    pipe.run_stage(run, BUILD, PIPELINE, __file__, **kwargs)
+
+    build = r"C:\Users\md1spsx\Documents\Data\iBEAt_Build"
+    pipe.run_stage(run, build, PIPELINE, __file__)
