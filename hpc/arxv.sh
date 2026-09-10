@@ -31,7 +31,7 @@ ARCHIVE="login1:/shared/abdominal_imaging/Archive/iBEAt_Build/dixon/stage_5_clea
 rsync -av --no-group --no-perms "$ARCHIVE" "$HPC" 
 
 # Define path variables here
-HPC="/mnt/parscratch/users/$(whoami)/data/iBEAt_Build/dixon/kidneyvol"
+HPC="/mnt/parscratch/users/$(whoami)/data/iBEAt_Build/kidneyvol"
 ARCHIVE="login1:/shared/abdominal_imaging/Archive/iBEAt_Build/kidneyvol/stage_3_edit"
 
 # srun runs your program on the allocated compute resources managed by Slurm
