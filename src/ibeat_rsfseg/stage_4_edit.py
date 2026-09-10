@@ -8,8 +8,8 @@ import numpy as np
 import dbdicom as db
 from miblab import pipe
 
-from rsfseg.utils.total_segmentator_class_maps import class_map
-from rsfseg.utils import data, edit
+from ibeat_rsfseg.utils.total_segmentator_class_maps import class_map
+from ibeat_rsfseg.utils import data, edit
 
 
 

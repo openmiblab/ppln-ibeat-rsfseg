@@ -10,8 +10,8 @@ import vreg
 import pydmr
 from miblab import pipe
 
-from rsfseg.utils import radiomics
-from rsfseg.utils.total_segmentator_class_maps import class_map
+from ibeat_rsfseg.utils import radiomics
+from ibeat_rsfseg.utils.total_segmentator_class_maps import class_map
 
 PIPELINE = 'rsfseg'
 

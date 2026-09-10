@@ -7,8 +7,8 @@ import dbdicom as db
 import pyvista as pv
 from miblab import pipe
 
-from rsfseg.utils.total_segmentator_class_maps import class_map
-from rsfseg.utils import data
+from ibeat_rsfseg.utils.total_segmentator_class_maps import class_map
+from ibeat_rsfseg.utils import data
 from miblab_plot import mosaic_overlay
 
 
