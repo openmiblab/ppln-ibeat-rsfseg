@@ -33,7 +33,7 @@ def renal_sinus_fat(fat, kidneys):
         if not sinus_fat.any():
             continue
 
-        sinus_fat_largest = _extract_largest_cluster_3d(sinus_fat)
+        sinus_fat_largest = _extract_significant_clusters_3d(sinus_fat)
         rsf[sinus_fat_largest] = kidney
 
     return rsf
@@ -65,3 +65,15 @@ def _extract_largest_cluster_3d(array):
     sizes = ndi.sum(array, label_img, index=range(1, cnt + 1))
     max_label = np.argmax(sizes) + 1
     return label_img == max_label
+
+def _extract_significant_clusters_3d(array, min_size_fraction=0.05, min_size_voxels=5):
+
+    structure = np.ones((3, 3, 3))
+    label_img, cnt = ndi.label(array, structure=structure)
+    if cnt == 0:
+        return np.zeros_like(array, dtype=bool)
+    sizes = ndi.sum(array, label_img, index=range(1, cnt + 1))
+    max_size = sizes.max()
+    threshold = max(min_size_voxels, min_size_fraction * max_size)
+    keep_labels = [i + 1 for i, s in enumerate(sizes) if s >= threshold]
+    return np.isin(label_img, keep_labels)

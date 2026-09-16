@@ -52,7 +52,6 @@ def renal_sinus_fat(fat, kidneys, bounded=False, max_dilation=8,
         original single-file behaviour; extra planes get a
         `_<plane>` suffix).
     """
-    print(f"Goede RSF loopt")
     rsf = np.zeros(kidneys.shape)
     fat_mask = _median_otsu_2d(fat, median_radius=1, numpass=1)
     for kidney in [1, 2]:
@@ -84,7 +83,7 @@ def renal_sinus_fat(fat, kidneys, bounded=False, max_dilation=8,
                 logging.info(f"No sinus fat found for {side} kidney, skipping mosaic")
             continue
 
-        sinus_fat_largest = _extract_significant_clusters_3d(sinus_fat)
+        sinus_fat_largest = _extract_largest_cluster_3d(sinus_fat)
         rsf[sinus_fat_largest] = kidney
 
         if save_mosaic:
