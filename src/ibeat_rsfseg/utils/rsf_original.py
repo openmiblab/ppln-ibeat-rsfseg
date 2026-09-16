@@ -60,7 +60,7 @@ def _convex_hull_image_3d(array, **kwargs):
 
 
 def _extract_largest_cluster_3d(array):
-    structure = np.ones((3, 3, 3))  # 26-connectiviteit i.p.v. default 6
+    structure = np.ones((3, 3, 3)) 
     label_img, cnt = ndi.label(array, structure=structure)
     sizes = ndi.sum(array, label_img, index=range(1, cnt + 1))
     max_label = np.argmax(sizes) + 1

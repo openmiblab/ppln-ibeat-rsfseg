@@ -32,7 +32,7 @@ VIEWS_TO_SHOW = [1]
 
 def run(build, logfile):
 
-    mask_task = 'rsf_masks'   
+    mask_task = 'rsf_masks_3'   
 
     datapath = os.path.join(build, 'dixon', 'stage_5_clean_dixon_data')
     maskpath = os.path.join(build, 'rsfseg', 'stage_1_segment')

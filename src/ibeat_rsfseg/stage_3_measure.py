@@ -10,10 +10,16 @@ import vreg
 import pydmr
 from miblab import pipe
 
-from ibeat_rsfseg.utils import radiomics
-from ibeat_rsfseg.utils.total_segmentator_class_maps import class_map
+from utils import radiomics
 
 PIPELINE = 'rsfseg'
+
+RSF_CLASS_MAP = {
+    1: 'left_kidney_sinus_fat',
+    2: 'right_kidney_sinus_fat',
+}
+
+TASKS = ['rsf_masks'] 
 
 def run(build, logfile, organs=None):
     maskpath = os.path.join(build, 'rsfseg', 'stage_1_segment')
@@ -22,20 +28,18 @@ def run(build, logfile, organs=None):
     group = 'Controls'
     sitemaskpath = os.path.join(maskpath, group)
     sitemeasurepath = os.path.join(measurepath, group) 
-    measure_task(sitemaskpath, sitemeasurepath, task='total_mr', organs=organs)
-    measure_task(sitemaskpath, sitemeasurepath, task='tissue_types_mr', organs=organs)
+    measure_task(sitemaskpath, sitemeasurepath, task=TASKS[0]  , organs=organs)
 
     group = 'Patients'   
     for site in ['Bari', 'Bordeaux', 'Exeter', 'Leeds', 'Sheffield', 'Turku']:
         sitemaskpath = os.path.join(maskpath, group, site)
         sitemeasurepath = os.path.join(measurepath, group, site)
-        measure_task(sitemaskpath, sitemeasurepath, task='total_mr', organs=organs)
-        measure_task(sitemaskpath, sitemeasurepath, task='tissue_types_mr', organs=organs)
+        measure_task(sitemaskpath, sitemeasurepath, task=TASKS[0], organs=organs)
     
     concatenate(measurepath)   
 
 
-def measure_task(sitemaskpath, sitemeasurepath, task='total_mr', organs=None):
+def measure_task(sitemaskpath, sitemeasurepath, task=TASKS[0], organs=None):
     os.makedirs(sitemeasurepath, exist_ok=True)
     masks = db.series(sitemaskpath)
 
@@ -77,7 +81,7 @@ def measure_image(automask, sitemeasurepath, task, organ=None):
     dmr = {'data':{}, 'pars':{}}
     
     # Loop over the classes
-    for idx, roi in tqdm(class_map[task].items()):
+    for idx, roi in tqdm(RSF_CLASS_MAP.items()):
 
         # Skip if not the requested organ
         if organ is not None:
@@ -158,7 +162,7 @@ if __name__=='__main__':
 
     # python src/ibeat_rsfseg/stage_3_measure.py --build=C:\Users\md1spsx\Documents\Data\iBEAt_Build --organs aorta
 
-    BUILD = r"C:\Users\md1spsx\Documents\Data\iBEAt_Build"
+    BUILD = r"X:\abdominal_imaging\Shared\Benthe\iBEAt_Build"
     kwargs = {
         "organs": {
             'type': str, 

@@ -7,8 +7,9 @@ from miblab import pipe
 
 from utils import data
 from utils import rsf_original as rsf
+from utils import rsf as rsf_new # new settings for RSF calculation
 
-PIPELINE = 'rsf'
+PIPELINE = 'rsfseg'
 
 def run(build, logfile):
     run_site(build, 'Controls')
@@ -25,7 +26,7 @@ def run_site(build, group, site=None):
         rsfpath = os.path.join(build, 'rsfseg', 'stage_1_segment', group)
     else:
         dixonpath = os.path.join(build, 'dixon', 'stage_5_clean_dixon_data', group, site)
-        kidneypath = os.path.join(build, 'stage_4_compute_fatwater', group, site)
+        kidneypath = os.path.join(build, 'kidneyvol', 'stage_3_edit', group, site)
         rsfpath = os.path.join(build, 'rsfseg', 'stage_1_segment', group, site)
     os.makedirs(rsfpath, exist_ok=True)
 
@@ -58,8 +59,9 @@ def run_site(build, group, site=None):
 
         # Skip if the RSF mask already exists
         mask_study = [rsfpath, patient_op, (study_op, 0)]
-        mask_series = mask_study + [('rsf_masks', 0)]
-        if mask_series in db.series(mask_study):
+        mask_series = mask_study + [('rsf_masks_4', 0)]
+        mask_2_series = mask_study + [('rsf_masks_5', 0)] # testing other settings 
+        if mask_2_series in db.series(mask_study):
             continue
 
         # Read the data
@@ -73,18 +75,21 @@ def run_site(build, group, site=None):
         # Perform convex hull RSF calculation
         try:
             rsf_values = rsf.renal_sinus_fat(fat.values, kidney_label.values)
+            rsf_values2 = rsf_new.renal_sinus_fat(fat.values, kidney_label.values, bounded = False, 
+                                                  max_dilation = 8, pole_cut =True, pole_cut_planes = ('coronal',),
+                                                  min_notch_depth = 5, save_mosaic = None)
         except Exception as e:
             logging.exception(f"Error computing RSF for {patient_op} {sequence}: {e}")
             continue
 
         # Save results
         db.write_volume((rsf_values, fat.affine), mask_series, ref=series_fat, verbose=0)
-
+        db.write_volume((rsf_values2, fat.affine), mask_2_series, ref=series_fat, verbose=0)
         # series = [path/to/database, patient_id, (study_description, 1), (series_description, 1)]
         # series = [/users/rsf, '001', ('rsf_masks', 0)]
 
 
 if __name__ == '__main__':
 
-    build = r"C:\Users\md1spsx\Documents\Data\iBEAt_Build"
+    build = r"X:\abdominal_imaging\Shared\Benthe"
     pipe.run_stage(run, build, PIPELINE, __file__)

@@ -18,7 +18,7 @@ _AXIS_BY_PLANE = {'axial': 2, 'coronal': 0, 'sagittal': 1}
 
 
 def renal_sinus_fat(fat, kidneys, bounded=False, max_dilation=8,
-                     pole_cut=False, pole_cut_planes=('axial',),
+                     pole_cut=False, pole_cut_planes=('coronal'),
                      min_notch_depth=3, save_mosaic=None):
     """Compute renal sinus fat mask via convex hull of the kidney mask.
 
@@ -84,11 +84,11 @@ def renal_sinus_fat(fat, kidneys, bounded=False, max_dilation=8,
                 logging.info(f"No sinus fat found for {side} kidney, skipping mosaic")
             continue
 
-        sinus_fat_largest = _extract_largest_cluster_3d(sinus_fat)
+        sinus_fat_largest = _extract_significant_clusters_3d(sinus_fat)
         rsf[sinus_fat_largest] = kidney
 
         if save_mosaic:
-            planes_to_show = pole_cut_planes if (pole_cut and pole_lines) else ('axial',)
+            planes_to_show = pole_cut_planes if (pole_cut and pole_lines) else ('coronal',)
             for plane in planes_to_show:
                 axis = _AXIS_BY_PLANE[plane]
                 suffix = '' if plane == 'axial' else f'_{plane}'
@@ -245,6 +245,27 @@ def _extract_largest_cluster_3d(array):
     max_label = np.argmax(sizes) + 1
     return label_img == max_label
 
+def _extract_significant_clusters_3d(array, min_size_fraction=0.05, min_size_voxels=5):
+    """Behoud alle 3D-samenhangende componenten boven een minimumgrootte,
+    in plaats van alleen de allergrootste. Renaal sinusvet zit vaak
+    opgesplitst in meerdere aparte pockets door de doorkruisende
+    nierarterie/-vene/ureter; alleen de grootste component bewaren gooit
+    echt sinusvet weg dat toevallig niet de grootste pocket is.
+
+    min_size_fraction: componenten kleiner dan deze fractie van de
+        grootste component worden weggegooid.
+    min_size_voxels: absolute ondergrens (in voxels) om losse
+        ruis-pixels alsnog te filteren, ongeacht de fractie hierboven.
+    """
+    structure = np.ones((3, 3, 3))
+    label_img, cnt = ndi.label(array, structure=structure)
+    if cnt == 0:
+        return np.zeros_like(array, dtype=bool)
+    sizes = ndi.sum(array, label_img, index=range(1, cnt + 1))
+    max_size = sizes.max()
+    threshold = max(min_size_voxels, min_size_fraction * max_size)
+    keep_labels = [i + 1 for i, s in enumerate(sizes) if s >= threshold]
+    return np.isin(label_img, keep_labels)
 
 def _save_qc_mosaic(out_path, mask, hull, fat_mask, sinus_fat, sinus_fat_largest,
                      pole_lines=None, max_slices=6, axis=2):

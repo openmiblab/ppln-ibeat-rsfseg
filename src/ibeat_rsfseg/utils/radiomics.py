@@ -9,7 +9,7 @@ import skimage
 # import vreg
 # from radiomics import featureextractor
 
-from ibeat_rsfseg.utils import numpyradiomics as nprad
+from utils import numpyradiomics as nprad
 
 
 biomarker_units = {
