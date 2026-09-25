@@ -25,9 +25,7 @@ TASKS = ['rsf_masks']
 
 
 def run(build, logfile, plane='coronal'):
-    DIXON = r"X:\abdominal_imaging\Shared\Benthe"
-
-    datapath = os.path.join(DIXON, 'dixon', 'stage_5_clean_dixon_data')
+    datapath = os.path.join(build, 'dixon', 'stage_5_clean_dixon_data')
     maskpath = os.path.join(build, 'rsfseg', 'stage_1_segment')
     editpath = os.path.join(build, 'rsfseg', 'stage_4_edit')
 
@@ -77,17 +75,17 @@ def run_site(sitedatapath, sitemaskpath, siteeditpath, task, plane):
         if edited_mask_series in db.series(edited_mask_study):
             continue
 
-        # Get the fat sequence
+        # Get the out-phase sequence
         sequence = data.dixon_series_desc(record, patient, study)
-        series_fat = [sitedatapath, patient, mask_series[2], (f'{sequence}_fat', 0)]
+        series_op = [sitedatapath, patient, mask_series[2], (f'{sequence}_out_phase', 0)]
 
-        # Skip if the Dixon fat series doesn't exist
-        if series_fat not in all_dixon_series:
-            logging.info(f"{patient} {study}: fat series not found, skipping.")
+        # Skip if the Dixon out-phase series doesn't exist
+        if series_op not in all_dixon_series:
+            logging.info(f"{patient} {study}: out-phase series not found, skipping.")
             continue
 
         try:
-            fat = db.volume(series_fat)
+            op = db.volume(series_op)
 
             # Get the auto-mask (same study, same series description as `task`)
             auto_label_series = [sitemaskpath, patient, mask_series[2], (task, 0)]
@@ -108,20 +106,20 @@ def run_site(sitedatapath, sitemaskpath, siteeditpath, task, plane):
             'axial': (0, 2, 1),
         }[plane]
         try:
-            fatarr = fat.values.transpose(transp)
+            oparr = op.values.transpose(transp)
             lblarr = auto_label_arr.transpose(transp)
             # Both RSF labels (left=1, right=2) are edited together in the
             # same napari session; default_label just sets the initially
             # selected paint label, which can be changed within napari.
-            edited_label = edit.edit_mask_with_napari(fatarr, lblarr, default_label=1)
+            edited_label = edit.edit_mask_with_napari(oparr, lblarr, default_label=1)
             edited_label = edited_label.transpose(transp)
         except Exception as e:
             logging.error(f"{patient} {study} error editing mask: {e}")
         else:
-            vol = (edited_label.astype(np.int16), fat.affine)
-            db.write_volume(vol, edited_mask_series, ref=series_fat)
+            vol = (edited_label.astype(np.int16), op.affine)
+            db.write_volume(vol, edited_mask_series, ref=series_op)
             # if not np.array_equal(auto_label_arr, vol[0]):
-            #   db.write_volume(vol, edited_mask_series, ref=series_fat)
+            #   db.write_volume(vol, edited_mask_series, ref=series_op)
 
 
 if __name__ == '__main__':
