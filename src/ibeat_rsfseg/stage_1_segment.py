@@ -7,9 +7,12 @@ from miblab import pipe
 
 from utils import data
 from utils import rsf_original as rsf
-from utils import rsf as rsf_new # new settings for RSF calculation
+from utils import rsf as rsf_new  # new settings for RSF calculation
 
 PIPELINE = 'rsfseg'
+
+FIXED_THRESHOLD = 0.5
+
 
 def run(build, logfile):
     run_site(build, 'Controls')
@@ -21,7 +24,7 @@ def run_site(build, group, site=None):
 
     # Define site paths
     if group == 'Controls':
-        dixonpath = os.path.join(build, 'dixon', 'stage_5_clean_dixon_data', group) 
+        dixonpath = os.path.join(build, 'dixon', 'stage_5_clean_dixon_data', group)
         kidneypath = os.path.join(build, 'kidneyvol', 'stage_3_edit', group)
         rsfpath = os.path.join(build, 'rsfseg', 'stage_1_segment', group)
     else:
@@ -52,6 +55,11 @@ def run_site(build, group, site=None):
         if series_fat not in all_dixon_series:
             continue
 
+        # Skip if the water series doesn't exist
+        series_water = series_op[:3] + [(sequence + '_water', 0)]
+        if series_water not in all_dixon_series:
+            continue
+
         # Skip if the kidney mask doesn't exist
         kidney_series = [kidneypath, patient_op, (study_op, 0), ('kidney_masks', 0)]
         if kidney_series not in all_kidney_masks:
@@ -60,13 +68,13 @@ def run_site(build, group, site=None):
         # Skip if the RSF mask already exists
         mask_study = [rsfpath, patient_op, (study_op, 0)]
         mask_series = mask_study + [('rsf_masks', 0)]
-        #mask_2_series = mask_study + [('rsf_masks_5', 0)] # testing other settings 
         if mask_series in db.series(mask_study):
             continue
 
         # Read the data
         try:
             fat = db.volume(series_fat, verbose=0)
+            water = db.volume(series_water, verbose=0)
             kidney_label = db.volume(kidney_series, verbose=0)
         except Exception as e:
             logging.exception(f"Error reading data for {patient_op} {sequence}: {e}")
@@ -74,10 +82,12 @@ def run_site(build, group, site=None):
 
         # Perform convex hull RSF calculation
         try:
-            rsf_values = rsf.renal_sinus_fat(fat.values, kidney_label.values)
-            #rsf_values2 = rsf_new.renal_sinus_fat(fat.values, kidney_label.values, bounded = False, 
-           #                                       max_dilation = 8, pole_cut =True, pole_cut_planes = ('coronal',),
-            #                                      min_notch_depth = 5, save_mosaic = None)
+            rsf_values =rsf_new.renal_sinus_fat(
+                fat.values, water.values, kidney_label.values,
+                fixed_threshold=FIXED_THRESHOLD, bounded=False, max_dilation=8,
+                pole_cut=None, pole_cut_planes=('sagittal',), min_notch_depth=3,
+                margin=0, median_radius=1, save_mosaic=None,
+            )
         except Exception as e:
             logging.exception(f"Error computing RSF for {patient_op} {sequence}: {e}")
             continue

@@ -4,7 +4,6 @@ import logging
 import numpy as np
 import cv2
 import skimage
-from dipy.segment.mask import median_otsu
 import scipy.ndimage as ndi
 import matplotlib
 matplotlib.use('Agg')  # geen scherm nodig, alleen wegschrijven
@@ -17,13 +16,21 @@ import matplotlib.pyplot as plt
 _AXIS_BY_PLANE = {'axial': 2, 'coronal': 0, 'sagittal': 1}
 
 
-def renal_sinus_fat(fat, kidneys, bounded=False, max_dilation=8,
-                     pole_cut=False, pole_cut_planes=('coronal'),
-                     min_notch_depth=3, save_mosaic=None):
+def renal_sinus_fat(fat, water, kidneys, fixed_threshold=0.5, bounded=False,
+                     max_dilation=8, pole_cut=False, pole_cut_planes=('coronal'),
+                     min_notch_depth=3, margin=10, median_radius=1,
+                     apply_median_filter=True, save_mosaic=None):
     """Compute renal sinus fat mask via convex hull of the kidney mask.
 
     fat: numpy array, fat-channel Dixon volume
+    water: numpy array, water-channel Dixon volume, zelfde shape als
+        `fat`. Wordt samen met `fat` gebruikt om de fat fraction map te
+        berekenen (fat / (fat + water)); de fat/non-fat classificatie
+        gebeurt op die fractiemap, niet op de ruwe fat-channel.
     kidneys: numpy array, kidney label mask (1=left, 2=right kidney)
+    fixed_threshold: float, drempel op de fat fraction map: voxels met
+        fat_fraction > fixed_threshold worden als vet beschouwd (geen
+        Otsu/median_otsu meer).
     bounded: bool, if True the convex hull is additionally restricted to
         stay within `max_dilation` pixels of the kidney mask, to avoid
         leakage into pararenal fat through open sides of the sinus
@@ -44,7 +51,16 @@ def renal_sinus_fat(fat, kidneys, bounded=False, max_dilation=8,
         survives the cut in every requested plane.
     min_notch_depth: float, minimum defect depth (in pixels) for a
         concavity to be treated as a real hilum notch when pole_cut=True.
-        Shallower defects (pixelation noise) are ignored.
+    margin: int, padding (in voxels, in-plane) added around each kidney
+        hull's bounding box before thresholding the fat fraction map.
+    median_radius: int, only used if `apply_median_filter=True`: radius
+        van de `scipy.ndimage` mediaanfilter die vóór het drempelen op
+        de fat-fraction crop wordt toegepast.
+    apply_median_filter: bool, if True (default), a
+        `2*median_radius+1`-sized in-plane median filter is applied to
+        the fat-fraction crop before thresholding, for noise
+        suppression. Set to False to threshold the raw fat-fraction
+        values directly.
     save_mosaic: str or None, if given, path (without extension) to save a
         per-kidney QC mosaic PNG showing mask / hull / pole line / fat /
         final mask for a handful of representative slices. One mosaic is
@@ -53,7 +69,11 @@ def renal_sinus_fat(fat, kidneys, bounded=False, max_dilation=8,
         `_<plane>` suffix).
     """
     rsf = np.zeros(kidneys.shape)
-    fat_mask = _median_otsu_2d(fat, median_radius=1, numpass=1)
+
+    # Fat fraction map: alle thresholding gebeurt hierop, in plaats van
+    # op de ruwe fat-channel.
+    fat_fraction = _fat_fraction_map(fat, water)
+
     for kidney in [1, 2]:
         side = 'left' if kidney == 1 else 'right'
         mask = (kidneys == kidney).astype(int)
@@ -66,6 +86,13 @@ def renal_sinus_fat(fat, kidneys, bounded=False, max_dilation=8,
         except Exception as e:
             logging.error(f"Convex hull failed fo label {kidney}: {e}")
             continue
+
+        # Fat/non-fat classification: vaste drempel op de fat-fraction
+        # map, per kidney, binnen een crop rond de convex hull.
+        fat_mask = _fixed_threshold_mask(
+            fat_fraction, kidney_hull, threshold=fixed_threshold,
+            margin=margin, median_radius=median_radius,
+            apply_median_filter=apply_median_filter)
 
         pole_lines = None
         if pole_cut:
@@ -83,7 +110,7 @@ def renal_sinus_fat(fat, kidneys, bounded=False, max_dilation=8,
                 logging.info(f"No sinus fat found for {side} kidney, skipping mosaic")
             continue
 
-        sinus_fat_largest = _extract_largest_cluster_3d(sinus_fat)
+        sinus_fat_largest = _extract_significant_clusters_3d(sinus_fat)
         rsf[sinus_fat_largest] = kidney
 
         if save_mosaic:
@@ -100,12 +127,65 @@ def renal_sinus_fat(fat, kidneys, bounded=False, max_dilation=8,
     return rsf
 
 
-def _median_otsu_2d(array, **kwargs):
-    mask = np.empty(array.shape)
-    for z in range(array.shape[2]):
-        image = np.squeeze(array[:, :, z])
-        _, mask[:, :, z] = median_otsu(image, **kwargs)
-    return mask
+def _fat_fraction_map(fat, water, eps=1e-6):
+    """Fat fraction map: fat / (fat + water), geclipt naar [0, 1].
+
+    eps voorkomt division-by-zero in achtergrondvoxels waar zowel fat
+    als water ~0 zijn.
+    """
+    fat = fat.astype(float)
+    water = water.astype(float)
+    denom = fat + water + eps
+    return np.clip(fat / denom, 0.0, 1.0)
+
+
+def _fixed_threshold_mask(fat_fraction, hull, threshold=0.5, margin=10,
+                           median_radius=1, apply_median_filter=True):
+    """Vaste-drempel fat mask op de fractiemap: voxels met
+    fat_fraction > threshold worden als vet beschouwd. Geen median_otsu.
+
+    Beperkt tot de bounding box rond de kidney hull (+margin), puur om
+    het rekenwerk te beperken -- de drempel zelf is niet
+    data-afhankelijk, dus een crop is functioneel niet nodig, maar dit
+    houdt gedrag/timing consistent met de lokale Otsu-variant.
+
+    Als `apply_median_filter=True` wordt vóór het drempelen een
+    2*median_radius+1-grote 2D-mediaanfilter (per slice, in-plane) op de
+    crop toegepast, voor ruisonderdrukking vergelijkbaar met wat
+    `median_otsu` intern doet. Zet op False om de rauwe fractiewaarden
+    direct te drempelen.
+    """
+    fat_mask = np.zeros(fat_fraction.shape, dtype=float)
+    bbox = _bbox_from_mask(hull, margin=margin)
+    if bbox is None:
+        return fat_mask
+
+    ys, xs, zs = bbox
+    region = fat_fraction[ys, xs, zs]
+
+    if apply_median_filter and median_radius > 0:
+        size = 2 * median_radius + 1
+        filtered = np.empty_like(region)
+        for i in range(region.shape[2]):
+            filtered[:, :, i] = ndi.median_filter(region[:, :, i], size=size)
+        region = filtered
+
+    fat_mask[ys, xs, zs] = (region > threshold).astype(float)
+    return fat_mask
+
+
+def _bbox_from_mask(mask, margin=10):
+    """Bounding box (tuple van slices) van `mask`, met `margin` voxels
+    extra aan elke kant (geclipt aan de array-grenzen). None als leeg."""
+    coords = np.argwhere(mask)
+    if coords.size == 0:
+        return None
+    mins = coords.min(axis=0)
+    maxs = coords.max(axis=0)
+    return tuple(
+        slice(max(0, mn - margin), min(dim, mx + margin + 1))
+        for mn, mx, dim in zip(mins, maxs, mask.shape)
+    )
 
 
 def _convex_hull_image_3d(array, **kwargs):
@@ -244,7 +324,7 @@ def _extract_largest_cluster_3d(array):
     max_label = np.argmax(sizes) + 1
     return label_img == max_label
 
-def _extract_significant_clusters_3d(array, min_size_fraction=0.05, min_size_voxels=5):
+def _extract_significant_clusters_3d(array, min_size_fraction=0, min_size_voxels=2):
     """Behoud alle 3D-samenhangende componenten boven een minimumgrootte,
     in plaats van alleen de allergrootste. Renaal sinusvet zit vaak
     opgesplitst in meerdere aparte pockets door de doorkruisende

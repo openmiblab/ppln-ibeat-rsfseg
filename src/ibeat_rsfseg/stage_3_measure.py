@@ -19,118 +19,79 @@ RSF_CLASS_MAP = {
     2: 'right_kidney_sinus_fat',
 }
 
-TASKS = ['rsf_masks'] 
+TASK = 'rsf_masks'
 
-def run(build, logfile, organs=None):
+
+def run(build, logfile):
     maskpath = os.path.join(build, 'rsfseg', 'stage_1_segment')
-    measurepath = os.path.join(build, 'rsfseg', 'stage_3_measure', 'source_data')
+    measurepath = os.path.join(build, 'rsfseg', 'stage_3_measure')
 
-    group = 'Controls'
-    sitemaskpath = os.path.join(maskpath, group)
-    sitemeasurepath = os.path.join(measurepath, group) 
-    measure_task(sitemaskpath, sitemeasurepath, task=TASKS[0]  , organs=organs)
+    measure_task(os.path.join(maskpath, 'Controls'),
+                 os.path.join(measurepath, 'Controls'))
 
-    group = 'Patients'   
     for site in ['Bari', 'Bordeaux', 'Exeter', 'Leeds', 'Sheffield', 'Turku']:
-        sitemaskpath = os.path.join(maskpath, group, site)
-        sitemeasurepath = os.path.join(measurepath, group, site)
-        measure_task(sitemaskpath, sitemeasurepath, task=TASKS[0], organs=organs)
-    
-    concatenate(measurepath)   
+        measure_task(os.path.join(maskpath, 'Patients', site),
+                     os.path.join(measurepath, 'Patients', site))
+
+    concatenate(measurepath)
 
 
-def measure_task(sitemaskpath, sitemeasurepath, task=TASKS[0], organs=None):
+def measure_task(sitemaskpath, sitemeasurepath):
     os.makedirs(sitemeasurepath, exist_ok=True)
-    masks = db.series(sitemaskpath)
+    masks = db.series(sitemaskpath)   # bouwt/valideert de index
+    masks = [m for m in masks if m[3][0] == TASK]
 
-    if not organs:
-        #tasks = [measure_image(mask, sitemeasurepath, task) for mask in masks]
-        tasks = [delayed(measure_image)(mask, sitemeasurepath, task) for mask in masks]
-    else:
-        tasks = []
-        for mask in masks:
-            for organ in organs:
-                #measure_image(mask, sitemeasurepath, task, organ)
-                tasks.append(delayed(measure_image)(mask, sitemeasurepath, task, organ))
+    n_jobs = int(os.environ.get('SLURM_CPUS_PER_TASK', 4))
+    Parallel(n_jobs=n_jobs)(
+        delayed(measure_image)(mask, sitemeasurepath) for mask in masks
+    )
 
-    Parallel(n_jobs=-1)(tasks)
-
-
-def measure_image(automask, sitemeasurepath, task, organ=None):
-
+def measure_image(automask, sitemeasurepath):
     patient, study, series = automask[1], automask[2][0], automask[3][0]
 
-    # Skip if not the requested task
-    if task != series:
+    if series != TASK:
         return
 
-    # If the results already exist, skip
-    if organ:
-        dmr_file = os.path.join(sitemeasurepath, f'{patient}_{study}_{series}_{organ}')
-    else:
-        dmr_file = os.path.join(sitemeasurepath, f'{patient}_{study}_{series}')
+    dmr_file = os.path.join(sitemeasurepath, f'{patient}_{study}_{series}')
     if os.path.exists(f'{dmr_file}.dmr.zip'):
         return
-    
-    print(f"Computing {dmr_file}")
 
-    # Get mask volume 
     vol = db.volume(automask, verbose=0)
+    labels = np.round(vol.values).astype(np.int16)
 
-    # Init results
-    dmr = {'data':{}, 'pars':{}}
-    
-    # Loop over the classes
-    for idx, roi in tqdm(RSF_CLASS_MAP.items()):
+    dmr = {'data': {}, 'pars': {}}
 
-        # Skip if not the requested organ
-        if organ is not None:
-            if organ != roi:
-                continue
-
-        # Binary mask
-        mask = (vol.values==idx).astype(np.float32)
-        if np.sum(mask) == 0:
+    for idx, roi in RSF_CLASS_MAP.items():
+        mask = (labels == idx).astype(np.float32)
+        if mask.sum() == 0:
             continue
 
         roi_vol = vreg.volume(mask, vol.affine)
-        
-        # Get skimage features
+
         try:
             results = radiomics.volume_features(roi_vol, roi)
         except Exception as e:
             logging.error(f"Patient {patient} {roi} - error computing ski-shapes: {e}")
         else:
-            dmr['data'] = dmr['data'] | {p: v[1:] for p, v in results.items()}
-            dmr['pars'] = dmr['pars'] | {(patient, study, p): v[0] for p, v in results.items()}
+            dmr['data'] |= {p: v[1:] for p, v in results.items()}
+            dmr['pars'] |= {(patient, study, p): v[0] for p, v in results.items()}
 
-        # # Get radiomics shape features
-        # # Take out for now because of installation issues
-        # try:
-        #     t = time.time()
-        #     results = radiomics.shape_features(roi_vol, roi)
-        #     print('pyrad time', time.time() - t)
-        # except Exception as e:
-        #     logging.error(f"Patient {patient} {roi} - error computing radiomics-shapes: {e}")
-        # else:
-        #     dmr['data'] = dmr['data'] | {p:v[1:] for p, v in results.items()}
-        #     dmr['pars'] = dmr['pars'] | {(patient, study, p): v[0] for p, v in results.items()}
-
-        # Get numpyradiomics shape features
         try:
             results = radiomics.shape_features_nprad(roi_vol, roi)
         except Exception as e:
             logging.error(f"Patient {patient} {roi} - error computing radiomics-shapes: {e}")
         else:
-            dmr['data'] = dmr['data'] | {p:v[1:] for p, v in results.items()}
-            dmr['pars'] = dmr['pars'] | {(patient, study, p): v[0] for p, v in results.items()}
+            dmr['data'] |= {p: v[1:] for p, v in results.items()}
+            dmr['pars'] |= {(patient, study, p): v[0] for p, v in results.items()}
 
-    # Append parsed biomarkers in the dictionary for convenience
+    if not dmr['data']:
+        logging.warning(f"{patient} {study}: geen resultaten, niets geschreven.")
+        return
+
     dmr['columns'] = ['body_part', 'biomarker_category', 'biomarker']
     for p in dmr['data']:
         dmr['data'][p] += p.split('-')
 
-    # Write results to file
     pydmr.write(dmr_file, dmr)
 
 
@@ -163,12 +124,5 @@ if __name__=='__main__':
     # python src/ibeat_rsfseg/stage_3_measure.py --build=C:\Users\md1spsx\Documents\Data\iBEAt_Build --organs aorta
 
     BUILD = r"X:\abdominal_imaging\Shared\Benthe\iBEAt_Build"
-    kwargs = {
-        "organs": {
-            'type': str, 
-            'default': None, 
-            'nargs': '+',  # multiple arguments allowed separated by space
-            'help': 'Organs',
-        }
-    }
-    pipe.run_stage(run, BUILD, PIPELINE, __file__, **kwargs)
+
+    pipe.run_stage(run, BUILD, PIPELINE, __file__)
