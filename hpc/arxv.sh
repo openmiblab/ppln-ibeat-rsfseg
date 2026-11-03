@@ -24,15 +24,8 @@ module load Anaconda3/2024.02-1
 module load Python/3.10.8-GCCcore-12.2.0 # essential to load latest GCC
 
 # Define path variables here
-HPC="/mnt/parscratch/users/$(whoami)/data/iBEAt_Build/dixon"
-ARCHIVE="login1:/shared/abdominal_imaging/Archive/iBEAt_Build/dixon/stage_5_clean_dixon_data"
-
-# srun runs your program on the allocated compute resources managed by Slurm
-rsync -av --no-group --no-perms "$ARCHIVE" "$HPC" 
-
-# Define path variables here
-HPC="/mnt/parscratch/users/$(whoami)/data/iBEAt_Build/kidneyvol"
-ARCHIVE="login1:/shared/abdominal_imaging/Archive/iBEAt_Build/kidneyvol/stage_3_edit"
+HPC="/mnt/parscratch/users/$(whoami)/data/iBEAt_Build/rsfseg"
+ARCHIVE="logina:/shared/abdominal_imaging/Shared/Benthe/iBEAt_Build/rsfseg/stage_4_edit"
 
 # srun runs your program on the allocated compute resources managed by Slurm
 rsync -av --no-group --no-perms "$ARCHIVE" "$HPC"

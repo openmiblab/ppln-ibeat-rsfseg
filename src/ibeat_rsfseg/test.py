@@ -1,15 +1,17 @@
-import os
-import dbdicom as db
-import stage_5_display as s5
+import SimpleITK as sitk, glob, os
 
-base = r"X:\abdominal_imaging\Shared\Benthe"
-b = base + r"\iBEAt_Build"
-dp = base + r"\dixon\stage_5_clean_dixon_data\Controls"
-mp = b + r"\rsfseg\stage_4_edit\Controls\rsf_masks"
-kp = b + r"\kidneyvol\stage_3_edit\Controls"
-out = b + r"\rsfseg\stage_5_display\Controls"
+d = r"X:\abdominal_imaging\Shared\Benthe\iBEAt_Build\rsfseg\stage_8_build_training_data\Dataset001_iBEAtRSF"
 
-s5.run_site(dp, mp, kp, out, task="rsf_masks_edited", n_jobs=1)
+def size(path):
+    r = sitk.ImageFileReader()
+    r.SetFileName(path)
+    r.ReadImageInformation()   # alleen header, geen pixeldata
+    return r.GetSize()
 
-target = os.path.join(out, "mosaic_fat_fraction_rsf_masks_edited")
-print(os.listdir(target))
+for lbl in sorted(glob.glob(os.path.join(d, "labelsTr", "*.nii.gz"))):
+    case = os.path.basename(lbl)[:-7]
+    ls = size(lbl)
+    for ch in sorted(glob.glob(os.path.join(d, "imagesTr", f"{case}_000*.nii.gz"))):
+        s = size(ch)
+        if s != ls:
+            print(case, os.path.basename(ch), s, ls, flush=True)

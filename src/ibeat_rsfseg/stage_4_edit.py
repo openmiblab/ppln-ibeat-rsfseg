@@ -25,7 +25,9 @@ RSF_CLASS_MAP = {
 
 TASKS = ['rsf_masks']
 
-SITES = ['Exeter', 'Bari', 'Leeds', 'Bordeaux', 'Turku', 'Sheffield']
+#SITES = ['Exeter', 'Bari', 'Leeds', 'Bordeaux', 'Turku', 'Sheffield']
+SITES = [ 'Turku_3']
+
 PREFETCH = 2  # aantal beelden dat alvast wordt ingelezen
 
 # Pogingen en wachttijd (s) bij een tijdelijk geblokkeerde index.json
@@ -40,6 +42,47 @@ DB_LOCK = threading.RLock()
 
 # Eén geopende database per pad (alleen voor lezen; wordt nooit teruggeschreven)
 _READ_DBS = {}
+
+# Eén geopende edit-database per pad (alleen gebruikt door de writer-thread)
+_WRITE_DBS = {}
+
+
+class _CachedRef:
+    """Stand-in voor de DataBaseDicom die write_volume(ref=...) zelf aanmaakt.
+
+    dbdicom.dbd.write_volume doet bij elke aanroep DataBaseDicom(ref[0]) en
+    daarna ref_mgr.close(). Dat betekent: de hele index.json van de data-
+    database opnieuw inlezen en weer terugschrijven, voor elk masker. Als die
+    index.json dan niet leesbaar is (net geschreven, geblokkeerd), verwijdert
+    dbdicom hem en leest het de HELE dicom-folder opnieuw in.
+    Hier geven we in plaats daarvan de al ingelezen register terug, en is
+    close() een no-op.
+    """
+    def __init__(self, dbd):
+        self.register = dbd.register
+
+    def close(self):
+        return self
+
+
+def _patch_dbdicom_ref():
+    import dbdicom.dbd as _dbd
+    if getattr(_dbd, '_ref_patched', False):
+        return
+    _orig = _dbd.DataBaseDicom
+
+    def _factory(path, *a, **k):
+        with DB_LOCK:
+            cached = _READ_DBS.get(path)
+        if cached is not None:
+            return _CachedRef(cached)
+        return _orig(path, *a, **k)
+
+    _dbd.DataBaseDicom = _factory
+    _dbd._ref_patched = True
+
+
+_patch_dbdicom_ref()
 
 
 def _retry(fn, what, attempts=RETRIES, delay=RETRY_DELAY):
@@ -57,15 +100,6 @@ def _retry(fn, what, attempts=RETRIES, delay=RETRY_DELAY):
             time.sleep(delay * i)
 
 
-def _read_db(path):
-    """Geef een gecachte, alleen-lezen database terug (leest index.json 1x)."""
-    with DB_LOCK:
-        dbd = _READ_DBS.get(path)
-        if dbd is None:
-            dbd = _retry(lambda: db.open(path), f"openen {path}")
-            _READ_DBS[path] = dbd
-        return dbd
-
 
 def _key(s):
     """Sleutel zonder volgnummers: (patient, studienaam, serienaam).
@@ -78,12 +112,12 @@ def _key(s):
 
 def run(build, logfile, plane='coronal'):
     datapath = os.path.join(build, 'dixon', 'stage_5_clean_dixon_data')
-    #datapath = r"X:\abdominal_imaging\Shared\Benthe\dixon\stage_5_clean_dixon_data"
     maskpath = os.path.join(build, 'rsfseg', 'stage_1_segment')
     editpath = os.path.join(build, 'rsfseg', 'stage_4_edit')
 
     # Stap 1: bouw één keer de volledige takenlijst
-    sites = [('Controls',)] + [('Patients', s) for s in SITES]
+   # sites = [('Controls',)] + [('Patients', s) for s in SITES]
+    sites = [('Patients', s) for s in SITES]
     jobs = []
     for parts in sites:
         for task in TASKS:
@@ -98,6 +132,20 @@ def run(build, logfile, plane='coronal'):
     # Stap 2: bewerken, met inlezen en schrijven op de achtergrond
     process(jobs, plane)
 
+def _read_db(path):
+    """Geef een gecachte, alleen-lezen database terug (leest index.json 1x).
+
+    db.open gebeurt buiten DB_LOCK, zodat meerdere databases tegelijk
+    kunnen worden ingelezen. Het slot beschermt alleen de cache.
+    """
+    with DB_LOCK:
+        dbd = _READ_DBS.get(path)
+    if dbd is None:
+        dbd = _retry(lambda: db.open(path), f"openen {path}")
+        with DB_LOCK:
+            dbd = _READ_DBS.setdefault(path, dbd)
+    return dbd
+
 
 def collect_jobs(sitedatapath, sitemaskpath, siteeditpath, task):
     siteeditpath = os.path.join(siteeditpath, task)
@@ -105,8 +153,31 @@ def collect_jobs(sitedatapath, sitemaskpath, siteeditpath, task):
 
     record = data.dixon_record()
 
-    # Elke database slechts één keer openen en één keer uitlezen
-    all_series = _read_db(sitedatapath).series()
+    # Data-, mask- en edit-index parallel inlezen (netwerk-I/O)
+    def timed(label, fn):
+        t0 = time.perf_counter()
+        result = fn()
+        logging.info(f"{label}: {time.perf_counter() - t0:.1f}s")
+        return result
+
+    def read_done():
+        try:
+            return {repr(s) for s in _read_db(siteeditpath).series()}
+        except Exception:
+            return set()  # edit-database bestaat nog niet
+
+    t_start = time.perf_counter()
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        f_data = ex.submit(timed, "data index",
+                           lambda: _read_db(sitedatapath).series())
+        f_mask = ex.submit(timed, "mask index",
+                           lambda: _read_db(sitemaskpath).series())
+        f_done = ex.submit(timed, "edit index", read_done)
+        all_series = f_data.result()
+        mask_all = f_mask.result()
+        done = f_done.result()
+    logging.info(f"alle indexen ingelezen: {time.perf_counter() - t_start:.1f}s")
+
     all_series_keys = {repr(s) for s in all_series}
     all_out_phase = [s for s in all_series
                      if s[3][0].endswith('out_phase')]
@@ -115,39 +186,31 @@ def collect_jobs(sitedatapath, sitemaskpath, siteeditpath, task):
     if n_dup:
         logging.info(f"{sitedatapath}: {n_dup} dubbele out-phase series (index > 0) overgeslagen")
 
-    mask_all = _read_db(sitemaskpath).series()
     masks = {(str(s[1]), s[2][0]): s
              for s in mask_all if s[3][0] == task}
-    try:
-        done = {repr(s) for s in _read_db(siteeditpath).series()}
-    except Exception:
-        done = set()  # edit-database bestaat nog niet
-    names = {s[3][0] for s in all_series}
-    logging.info(f"data series namen: {sorted(names)[:20]}")
-    logging.info(f"mask series namen: {sorted({s[3][0] for s in mask_all})}")
-    logging.info(f"voorbeeld mask-series: {mask_all[:2]}")
     logging.info(
         f"{sitedatapath}: {len(out_phase_series)} out-phase series, "
         f"{len(masks)} {task} in {sitemaskpath}"
     )
 
+    t_loop = time.perf_counter()
     jobs = []
     for series_op in out_phase_series:
         patient = series_op[1]
         study = series_op[2][0]
         sequence = series_op[3][0][:-len('_out_phase')]
 
-        # Alleen de geselecteerde dixon-sequence
-        if sequence != data.dixon_series_desc(record, patient, study):
-            continue
-
-        # Alleen als er een automatisch masker bestaat
+        # Goedkoopste controles eerst: bestaat er een masker, en is het nog niet bewerkt?
         mask_series = masks.get((str(patient), study))
         if mask_series is None:
             continue
 
         edited_mask_series = [siteeditpath, patient, (study, 0), (f"{task}_edited", 0)]
         if repr(edited_mask_series) in done:
+            continue
+
+        # Alleen de geselecteerde dixon-sequence
+        if sequence != data.dixon_series_desc(record, patient, study):
             continue
 
         # Zoals in stage_1: fat is de referentie; water is de terugval-afbeelding
@@ -168,6 +231,7 @@ def collect_jobs(sitedatapath, sitemaskpath, siteeditpath, task):
             'label_series': mask_series,
             'edited_series': edited_mask_series,
         })
+    logging.info(f"job-loop: {time.perf_counter() - t_loop:.1f}s, {len(jobs)} jobs")
     return jobs
 
 
@@ -216,7 +280,11 @@ def write_job(vol, edited_series, ref):
     index.json terug. Dat gebeurt onder DB_LOCK zodat de reader-thread niet
     tegelijk dezelfde index.json leest of schrijft.
     """
-    dbd = _retry(lambda: db.open(edited_series[0]), f"openen {edited_series[0]}")
+    path = edited_series[0]
+    dbd = _WRITE_DBS.get(path)
+    if dbd is None:
+        dbd = _retry(lambda: db.open(path), f"openen {path}")
+        _WRITE_DBS[path] = dbd
     with DB_LOCK:
         dbd.write_volume(vol, edited_series, ref=ref, verbose=0)
     # index.json van de edit-database wegschrijven, met herpogingen

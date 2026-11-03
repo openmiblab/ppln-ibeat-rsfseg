@@ -41,7 +41,7 @@ VIEWS_TO_SHOW = [1]
 
 # Which image to use as the mosaic background. One of:
 #   'fat_fraction', 'fat', 'water', 'in_phase', 'out_phase'
-BACKGROUND = 'out_phase'
+BACKGROUND = 'fat_fraction'
 
 BACKGROUND_SUFFIXES = {
     'fat': ['_fat'],
@@ -282,5 +282,5 @@ def run_site(sitedatapath, sitemaskpath, sitekidneyvolpath, sitedisplaypath,
 
 if __name__ == '__main__':
 
-    build = r"X:\abdominal_imaging\Shared\SSC_Chimnazam Adams\iBEAt_Build"
+    build = r"X:\abdominal_imaging\Shared\Benthe\iBEAt_Build"
     pipe.run_stage(run, build, PIPELINE, __file__)

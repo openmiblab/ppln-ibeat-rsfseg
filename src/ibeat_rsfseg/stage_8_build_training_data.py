@@ -18,7 +18,6 @@ from utils import data
 
 PIPELINE = 'rsfseg'
 
-# Mask series (edited in stage 1 for now, changing later to 4) to use as training labels.
 TASKS = ['rsf_masks']
 
 DATASET = 'Dataset001_iBEAtRSF'
@@ -29,7 +28,7 @@ SITES = ['Exeter', 'Bari', 'Leeds', 'Bordeaux', 'Turku', 'Sheffield']
 def run(build, logfile):
 
     datapath = os.path.join(build, 'dixon', 'stage_5_clean_dixon_data')
-    editpath = os.path.join(build, 'rsfseg', 'stage_1_segment')
+    editpath = os.path.join(build, 'rsfseg', 'stage_4_edit')
     trainpath = os.path.join(build, 'rsfseg', 'stage_8_build_training_data')
     scratchpath = os.path.join(build, 'rsfseg', 'stage_8_scratch')  # series used for nifti export
 
@@ -42,8 +41,7 @@ def run(build, logfile):
     for task in TASKS:
         run_site(
             os.path.join(datapath, group),
-           #os.path.join(editpath, group, task),
-            os.path.join(editpath, group),
+            os.path.join(editpath, group, task),
             database, os.path.join(scratchpath, group), task,
         )
 
@@ -52,8 +50,7 @@ def run(build, logfile):
         for task in TASKS:
             run_site(
                 os.path.join(datapath, group, site),
-               # os.path.join(editpath, group, site, task),
-                os.path.join(editpath, group, site),
+                os.path.join(editpath, group, site, task),
                 database, os.path.join(scratchpath, group, site), task,
             )
 
@@ -66,6 +63,12 @@ def run_site(sitedatapath, siteeditpath, database, sitescratchpath, task):
     labels_tr = os.path.join(database, 'labelsTr')
     os.makedirs(sitescratchpath, exist_ok=True)
 
+    # Not edited yet (stage_4 only covers some sites): skip, and do not let
+    # dbdicom create an empty database in the edit folder
+    if not os.path.exists(os.path.join(siteeditpath, 'index.json')):
+        logging.info(f"{siteeditpath}: no edited masks, skipping.")
+        return
+
     record = data.dixon_record()
     all_dixon_series = db.series(sitedatapath)
 
@@ -73,7 +76,7 @@ def run_site(sitedatapath, siteeditpath, database, sitescratchpath, task):
     for edited_series in tqdm(db.series(siteeditpath), desc=f'Building {siteeditpath[-30:]}..'):
 
         # Skip if not the correct task
-        if edited_series[3][0] != task: # f"{task}_edited":
+        if edited_series[3][0] != f"{task}_edited":
             continue
 
         patient = edited_series[1]

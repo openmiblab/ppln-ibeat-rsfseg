@@ -50,7 +50,7 @@ def run(build, fold=0):
 
 if __name__ == '__main__':
 
-    BUILD = r"C:\Users\md1spsx\Documents\Data\iBEAt_Build"
+    BUILD = r"X:\abdominal_imaging\Shared\Benthe\iBEAt_Build"
 
     # Comment for the cluster
     os.environ['nnUNet_n_proc_DA'] = '4' # Set in .sh file

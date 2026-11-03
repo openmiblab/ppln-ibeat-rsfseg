@@ -30,7 +30,7 @@ export VTK_DEFAULT_OPENGL_WINDOW=vtkOSOpenGLRenderWindow
 ENV="/mnt/parscratch/users/$(whoami)/envs/rsfseg"
 CODE="/mnt/parscratch/users/$(whoami)/scripts/ppln-ibeat-rsfseg/src/ibeat_rsfseg"
 BUILD="/mnt/parscratch/users/$(whoami)/data/iBEAt_Build"
-ARCHIVE="logina:/shared/abdominal_imaging/Shared/Benthe/iBEAt_Build"
+ARCHIVE="loginb:/shared/abdominal_imaging/Shared/Benthe/iBEAt_Build"
 
 # srun runs your program on the allocated compute resources managed by Slurm
 srun "$ENV/bin/python" "$CODE/stage_9_preprocess.py" --build="$BUILD"
