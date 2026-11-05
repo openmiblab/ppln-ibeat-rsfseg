@@ -30,4 +30,4 @@ export VTK_DEFAULT_OPENGL_WINDOW=vtkOSOpenGLRenderWindow
 SHARED="logina:/shared/abdominal_imaging/Shared/Benthe/iBEAt_Build/rsfseg"
 ARCHIVE="logina:/shared/abdominal_imaging/Archive/iBEAt_Build"
 
-rsync -av --no-group --no-perms --delete "$SHARED" "$ARCHIVE"
+rsync -av --no-group --no-perms "$SHARED" "$ARCHIVE"
