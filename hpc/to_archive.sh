@@ -1,5 +1,5 @@
-#!/bin/bash   
-#SBATCH --mem=8G         
+#!/bin/bash
+#SBATCH --mem=4G
 #SBATCH --cpus-per-task=1
 #SBATCH --time=72:00:00
 #SBATCH --mail-user=s.sourbron@sheffield.ac.uk
@@ -8,26 +8,20 @@
 #SBATCH --output=logs/to_archive.out
 #SBATCH --error=logs/to_archive.err
 
-# Unsets the CPU binding policy.
-# Some clusters automatically bind threads to cores; unsetting it can 
-# prevent performance issues if your code manages threading itself 
-# (e.g. OpenMP, NumPy, or PyTorch).
-unset SLURM_CPU_BIND
+# This ensure that the second command is only run if the first succeeds
+set -euo pipefail
 
-# Ensures that all your environment variables from the submission 
-# environment are passed into the job’s environment
-export SLURM_EXPORT_ENV=ALL
-
-# Loads the Anaconda module provided by the cluster.
-# (On HPC systems, software is usually installed as “modules” to avoid version conflicts.)
-module load Anaconda3/2025.06-1
-module load Python/3.10.8-GCCcore-12.2.0 # essential to load latest GCC
-
-# Tell VTK/PyVista to use the OSMesa (Off-Screen) library
-export VTK_DEFAULT_OPENGL_WINDOW=vtkOSOpenGLRenderWindow
-
-# Define path variables here
 SHARED="logina:/shared/abdominal_imaging/Shared/Benthe/iBEAt_Build/rsfseg"
 ARCHIVE="logina:/shared/abdominal_imaging/Archive/iBEAt_Build"
+STAGING="/mnt/parscratch/users/$(whoami)/data/iBEAt_Build"
 
-rsync -av --no-group --no-perms "$SHARED" "$ARCHIVE"
+echo "Step 1: shared -> staging"
+rsync -av --partial --no-group --no-perms "$SHARED" "$STAGING"
+
+echo "Step 2: staging -> archive"
+rsync -av --partial --no-group --no-perms "$STAGING/rsfseg" "$ARCHIVE"
+
+echo "Done"
+
+# Check this before deleting the stat=ging folder
+# rsync -avnc --no-group --no-perms "$STAGING/rsfseg" "$ARCHIVE"
