@@ -9,11 +9,12 @@ import json
 import logging
 
 import numpy as np
+from tifffile import logger
 from tqdm import tqdm
 import dbdicom as db
 from miblab import pipe
-
 from utils import data
+import shutil
 
 
 PIPELINE = 'rsfseg'
@@ -23,8 +24,6 @@ TASKS = ['rsf_masks']
 DATASET = 'Dataset001_iBEAtRSF'
 
 SITES = ['Exeter', 'Bari', 'Leeds', 'Bordeaux', 'Turku', 'Sheffield']
-
-
 def run(build, logfile):
 
     datapath = os.path.join(build, 'dixon', 'stage_5_clean_dixon_data')
@@ -120,22 +119,34 @@ def run_site(sitedatapath, siteeditpath, database, sitescratchpath, task):
             logging.exception(f"{case_id}: error reading data: {e}")
             continue
 
+                # Fresh scratch database per case, so stale series from an earlier
+        # crashed run can never clash with the ones written now
+        case_scratch = os.path.join(sitescratchpath, case_id)
+        shutil.rmtree(case_scratch, ignore_errors=True)
+        os.makedirs(case_scratch, exist_ok=True)
+
         try:
-            # Write FF and clean label to scratch, so that all channels
-            # go through the same db.to_nifti
-            scratch_study = [sitescratchpath, patient, (study, 0)]
+            scratch_study = [case_scratch, patient, (study, 0)]
             series_ff = scratch_study + [(f'{sequence}_fat_fraction', 0)]
             series_lbl = scratch_study + [('rsf_label', 0)]
             db.write_volume((ff, fat.affine), series_ff, ref=series_fi, verbose=0)
             db.write_volume((label_arr, label.affine), series_lbl, ref=series_op, verbose=0)
 
             for s, f in zip([series_op, series_ip, series_wi, series_fi, series_ff], niis):
-                db.to_nifti(s, f, verbose=0)
+                try:
+                    db.to_nifti(s, f, verbose=0)
+                except ValueError as e:
+                    if "same orientation" in str(e):
+                        logger.warning("%s: mixed-orientation series, skipping/splitting: %s", subject_id, s)
+                        # call split-and-convert fallback here
+                    else:
+                        raise
             db.to_nifti(series_lbl, nii_label, verbose=0)  # label last
             logging.info(f"{case_id}: successfully written training data")
         except Exception as e:
             logging.exception(f"{case_id}: error writing training data: {e}")
-
+        finally:
+            shutil.rmtree(case_scratch, ignore_errors=True)
 
 def build_json(database):
 

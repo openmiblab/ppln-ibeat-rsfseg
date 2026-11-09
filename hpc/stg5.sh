@@ -35,5 +35,5 @@ BUILD="/mnt/parscratch/users/$(whoami)/data/iBEAt_Build"
 ARCHIVE="loginb:/shared/abdominal_imaging/Shared/Benthe/iBEAt_Build"
 
 # srun runs your program on the allocated compute resources managed by Slurm
-srun "$ENV/bin/python" "$CODE/stage_5_display.py" --build="$BUILD"
+#srun "$ENV/bin/python" "$CODE/stage_5_display.py" --build="$BUILD"
 rsync -av --no-group --no-perms "$BUILD/rsfseg/stage_5_display" "$ARCHIVE/rsfseg"

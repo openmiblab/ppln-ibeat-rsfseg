@@ -8,13 +8,7 @@
 #SBATCH --output=logs/stg6_measure.out
 #SBATCH --error=logs/stg6_measure.err
 
-# NOTE: the logs/ folder must exist before you submit (run `mkdir -p logs`
-# once in the folder you call sbatch from); Slurm does not create it.
 
-# Unsets the CPU binding policy.
-# Some clusters automatically bind threads to cores; unsetting it can
-# prevent performance issues if your code manages threading itself
-# (e.g. OpenMP, NumPy, or PyTorch).
 unset SLURM_CPU_BIND
 export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
@@ -35,16 +29,9 @@ export VTK_DEFAULT_OPENGL_WINDOW=vtkOSOpenGLRenderWindow
 ENV="/mnt/parscratch/users/$(whoami)/envs/rsfseg"
 CODE="/mnt/parscratch/users/$(whoami)/scripts/ppln-ibeat-rsfseg/src/ibeat_rsfseg"
 BUILD="/mnt/parscratch/users/$(whoami)/data/iBEAt_Build"
-ARCHIVE="logina:/shared/abdominal_imaging/Shared/Benthe/iBEAt_Build"
+ARCHIVE="loginb:/shared/abdominal_imaging/Shared/Benthe/iBEAt_Build"
 
-# Copy the stage 4 output to scratch. Trailing-slash-free source with the
-# PARENT folder as destination, so it lands in $BUILD/rsfseg/stage_4_edit.
-# index.json is excluded: dbdicom rebuilds it on this machine.
-
-rsync -av --no-group --no-perms --ignore-existing --exclude='index.json' \
-    "$ARCHIVE/rsfseg/stage_4_edit" "$BUILD/rsfseg/"
-    
-# srun runs your program on the allocated compute resources managed by Slurm
+   
 srun "$ENV/bin/python" "$CODE/stage_6_measure.py" --build="$BUILD"
 
 # Copy results back: the per-image results ...

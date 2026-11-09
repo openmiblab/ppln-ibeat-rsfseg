@@ -1,7 +1,7 @@
 #!/bin/bash   
 #SBATCH --mem=128G         
 #SBATCH --cpus-per-task=32
-#SBATCH --time=72:00:00
+#SBATCH --time=48:00:00
 #SBATCH --mail-user=bariens1@sheffield.ac.uk
 #SBATCH --mail-type=FAIL,END
 #SBATCH --job-name=stg11
@@ -30,9 +30,12 @@ export VTK_DEFAULT_OPENGL_WINDOW=vtkOSOpenGLRenderWindow
 ENV="/mnt/parscratch/users/$(whoami)/envs/rsfseg"
 CODE="/mnt/parscratch/users/$(whoami)/scripts/ppln-ibeat-rsfseg/src/ibeat_rsfseg"
 BUILD="/mnt/parscratch/users/$(whoami)/data/iBEAt_Build"
-ARCHIVE="logina:/shared/abdominal_imaging/Shared/Benthe/iBEAt_Build"
+ARCHIVE="loginb:/shared/abdominal_imaging/Shared/Benthe/iBEAt_Build"
 
 # srun runs your program on the allocated compute resources managed by Slurm
+
 srun "$ENV/bin/python" "$CODE/stage_11_find_config.py" --build="$BUILD"
-rsync -av --no-group --no-perms "$BUILD/rsfseg/stage_11_find_config" "$ARCHIVE/rsfseg"
+
+rsync -av --no-group --no-perms "$BUILD/rsfseg/stage_10_train/" "$ARCHIVE/rsfseg/stage_10_train/"
+rsync -av --no-group --no-perms "$BUILD/rsfseg/stage_11_find_config.log" "$ARCHIVE/rsfseg/"
 

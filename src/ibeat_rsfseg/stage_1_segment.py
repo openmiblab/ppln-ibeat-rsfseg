@@ -94,9 +94,7 @@ def run_site(build, group, site=None):
 
         # Save results
         db.write_volume((rsf_values, fat.affine), mask_series, ref=series_fat, verbose=0)
-        #db.write_volume((rsf_values2, fat.affine), mask_2_series, ref=series_fat, verbose=0)
-        # series = [path/to/database, patient_id, (study_description, 1), (series_description, 1)]
-        # series = [/users/rsf, '001', ('rsf_masks', 0)]
+
 
 
 if __name__ == '__main__':

@@ -11,7 +11,9 @@ import vreg
 import pydmr
 from miblab import pipe
 
+from utils import data
 from utils import radiomics
+from utils import rsf_features
 
 PIPELINE = 'rsfseg'
 
@@ -20,19 +22,15 @@ RSF_CLASS_MAP = {
     2: 'right_kidney_sinus_fat',
 }
 
-# Stage 4 writes edited masks to
-#   stage_4_edit/<Controls | Patients/<site>>/<task>/
-# as series named '<task>_edited'. Both the current task and the earlier
-# 'rsf_masks' task exist on disk; remove one here to measure only the other.
-TASKS = ['renal_sinus_fat', 'rsf_masks']
+KIDNEY_LABELS = {
+    'left_kidney_sinus_fat': [1],
+    'right_kidney_sinus_fat': [2],
+}
 
+TASKS = ['rsf_masks']
 SITES = ['Bari', 'Bordeaux', 'Exeter', 'Leeds', 'Sheffield', 'Turku']
 
-# True: move the existing index.json aside (as index.json.bak) and let
-# dbdicom rebuild it from the files on disk on every run.
-REBUILD_INDEX = True
-
-# Retries (and wait in s) when index.json is temporarily locked
+REBUILD_INDEX = False
 RETRIES = 6
 RETRY_DELAY = 2.0
 
@@ -52,26 +50,71 @@ def _retry(fn, what, attempts=RETRIES, delay=RETRY_DELAY):
             time.sleep(delay * i)
 
 
+def _key(s):
+    """(patient, study name, series name) - ignores the index numbers."""
+    return (str(s[1]), s[2][0], s[3][0])
+
+
 def run(build, logfile):
     maskpath = os.path.join(build, 'rsfseg', 'stage_4_edit')
     measurepath = os.path.join(build, 'rsfseg', 'stage_6_measure')
+    dixonpath = os.path.join(build, 'dixon', 'stage_5_clean_dixon_data')
+    kidneypath = os.path.join(build, 'kidneyvol', 'stage_3_edit')
 
     for task in TASKS:
         taskmeasure = os.path.join(measurepath, task)
 
         measure_task(task,
                      os.path.join(maskpath, 'Controls', task),
-                     os.path.join(taskmeasure, 'Controls'))
+                     os.path.join(taskmeasure, 'Controls'),
+                     os.path.join(dixonpath, 'Controls'),
+                     os.path.join(kidneypath, 'Controls'))
 
         for site in SITES:
             measure_task(task,
                          os.path.join(maskpath, 'Patients', site, task),
-                         os.path.join(taskmeasure, 'Patients', site))
+                         os.path.join(taskmeasure, 'Patients', site),
+                         os.path.join(dixonpath, 'Patients', site),
+                         os.path.join(kidneypath, 'Patients', site))
 
         concatenate(task, taskmeasure)
 
 
-def _jobs(dbd, masks, sitemeasurepath):
+def _read_volume(dbd, series, what):
+    vol = _retry(lambda: dbd.volume(series, None, 0), what)
+    return vol.values, vol.affine
+
+
+def _load_extras(patient, study, dixon_dbd, dixon_index, kidney_dbd, kidney_index, record):
+    """Fat, water and kidney volumes for one patient/study (None when missing)."""
+    extras = {'fat': None, 'water': None, 'kidney': None}
+
+    try:
+        sequence = data.dixon_series_desc(record, patient, study)
+        fat_s = dixon_index.get((str(patient), study, f'{sequence}_fat'))
+        water_s = dixon_index.get((str(patient), study, f'{sequence}_water'))
+        if fat_s is None or water_s is None:
+            logging.warning(f"{patient} {study}: fat/water series not found, no FF features.")
+        else:
+            extras['fat'] = _read_volume(dixon_dbd, fat_s, f"reading fat {patient} {study}")
+            extras['water'] = _read_volume(dixon_dbd, water_s, f"reading water {patient} {study}")
+    except Exception as e:
+        logging.error(f"{patient} {study}: error reading fat/water: {e}")
+        extras['fat'] = extras['water'] = None
+
+    try:
+        kidney_s = kidney_index.get((str(patient), study, 'kidney_masks'))
+        if kidney_s is None:
+            logging.warning(f"{patient} {study}: kidney mask not found, no kidney ratio.")
+        else:
+            extras['kidney'] = _read_volume(kidney_dbd, kidney_s, f"reading kidney {patient} {study}")
+    except Exception as e:
+        logging.error(f"{patient} {study}: error reading kidney mask: {e}")
+
+    return extras
+
+
+def _jobs(dbd, masks, sitemeasurepath, ctx):
     """Read volumes one at a time in the main process (no concurrent
     access to index.json) and hand the arrays to the workers."""
     for mask in masks:
@@ -86,18 +129,17 @@ def _jobs(dbd, masks, sitemeasurepath):
             logging.error(f"{patient} {study}: error reading mask: {e}")
             continue
         labels = np.round(vol.values).astype(np.int16)
-        yield delayed(measure_image)(patient, study, labels, vol.affine, dmr_file)
+        extras = _load_extras(patient, study, **ctx)
+        yield delayed(measure_image)(patient, study, labels, vol.affine, dmr_file, extras)
 
 
-def measure_task(task, sitemaskpath, sitemeasurepath):
+def measure_task(task, sitemaskpath, sitemeasurepath, sitedixonpath, sitekidneypath):
     if not os.path.isdir(sitemaskpath):
         logging.warning(f"{sitemaskpath}: no edited masks found, skipping.")
         return
     series_name = f'{task}_edited'
     os.makedirs(sitemeasurepath, exist_ok=True)
 
-    # Force a fresh index: move the old index.json aside (kept as .bak) so
-    # dbdicom has to rebuild it by scanning the files in the folder.
     if REBUILD_INDEX:
         index_file = os.path.join(sitemaskpath, 'index.json')
         if os.path.exists(index_file):
@@ -105,7 +147,21 @@ def measure_task(task, sitemaskpath, sitemeasurepath):
                    f"moving old index.json {sitemaskpath}")
             logging.info(f"{sitemaskpath}: old index.json moved to index.json.bak")
 
-    # Open the database once; volumes are read one at a time (see _jobs).
+    ctx = {'record': data.dixon_record(),
+           'dixon_dbd': None, 'dixon_index': {},
+           'kidney_dbd': None, 'kidney_index': {}}
+    try:
+        ctx['dixon_dbd'] = _retry(lambda: db.open(sitedixonpath), f"opening {sitedixonpath}")
+        ctx['dixon_index'] = {_key(s): s for s in ctx['dixon_dbd'].series()}
+    except Exception as e:
+        logging.error(f"{sitedixonpath}: cannot open dixon database ({e}); no FF features.")
+    try:
+        ctx['kidney_dbd'] = _retry(lambda: db.open(sitekidneypath), f"opening {sitekidneypath}")
+        ctx['kidney_index'] = {_key(s): s for s in ctx['kidney_dbd'].series()}
+    except Exception as e:
+        logging.error(f"{sitekidneypath}: cannot open kidney database ({e}); no kidney ratio.")
+
+    # Open the mask database once; volumes are read one at a time (see _jobs).
     dbd = _retry(lambda: db.open(sitemaskpath), f"opening {sitemaskpath}")
     try:
         all_series = _retry(dbd.series, f"listing {sitemaskpath}")
@@ -119,15 +175,40 @@ def measure_task(task, sitemaskpath, sitemeasurepath):
             )
         else:
             n_jobs = int(os.environ.get('SLURM_CPUS_PER_TASK', 4))
-            Parallel(n_jobs=n_jobs)(_jobs(dbd, masks, sitemeasurepath))
+            Parallel(n_jobs=n_jobs)(_jobs(dbd, masks, sitemeasurepath, ctx))
     finally:
-        # Single writer, after all reading is done: saves the rebuilt
-        # index.json, also when there were no masks or an error occurred.
+
         _retry(dbd.close, f"writing index.json {sitemaskpath}")
 
 
-def measure_image(patient, study, labels, affine, dmr_file):
+def _collect(dmr, patient, study, results):
+    dmr['data'] |= {p: v[1:] for p, v in results.items()}
+    dmr['pars'] |= {(patient, study, p): v[0] for p, v in results.items()}
+
+
+def measure_image(patient, study, labels, affine, dmr_file, extras=None):
     dmr = {'data': {}, 'pars': {}}
+    extras = extras or {}
+
+
+    ff = None
+    kidney = None
+    try:
+        if extras.get('fat') is not None and extras.get('water') is not None:
+            fat, fat_affine = extras['fat']
+            water, water_affine = extras['water']
+            rsf_features.check_same_grid(fat, fat_affine, affine, labels.shape, 'fat image')
+            rsf_features.check_same_grid(water, water_affine, affine, labels.shape, 'water image')
+            ff = rsf_features.fat_fraction_map(fat, water)
+    except Exception as e:
+        logging.error(f"{patient} {study}: fat fraction map not computed: {e}")
+    try:
+        if extras.get('kidney') is not None:
+            kidney_arr, kidney_affine = extras['kidney']
+            rsf_features.check_same_grid(kidney_arr, kidney_affine, affine, labels.shape, 'kidney mask')
+            kidney = np.round(kidney_arr).astype(np.int16)
+    except Exception as e:
+        logging.error(f"{patient} {study}: kidney mask not used: {e}")
 
     for idx, roi in RSF_CLASS_MAP.items():
         mask = (labels == idx).astype(np.float32)
@@ -141,16 +222,25 @@ def measure_image(patient, study, labels, affine, dmr_file):
         except Exception as e:
             logging.error(f"Patient {patient} {roi} - error computing ski-shapes: {e}")
         else:
-            dmr['data'] |= {p: v[1:] for p, v in results.items()}
-            dmr['pars'] |= {(patient, study, p): v[0] for p, v in results.items()}
+            _collect(dmr, patient, study, results)
 
         try:
             results = radiomics.shape_features_nprad(roi_vol, roi)
         except Exception as e:
             logging.error(f"Patient {patient} {roi} - error computing radiomics-shapes: {e}")
         else:
-            dmr['data'] |= {p: v[1:] for p, v in results.items()}
-            dmr['pars'] |= {(patient, study, p): v[0] for p, v in results.items()}
+            _collect(dmr, patient, study, results)
+
+        try:
+            kidney_mask = None
+            if kidney is not None:
+                kidney_mask = np.isin(kidney, KIDNEY_LABELS[roi])
+            results = rsf_features.rsf_features(
+                roi, mask, roi_vol.spacing, ff=ff, kidney_mask=kidney_mask)
+        except Exception as e:
+            logging.error(f"Patient {patient} {roi} - error computing RSF features: {e}")
+        else:
+            _collect(dmr, patient, study, results)
 
     if not dmr['data']:
         logging.warning(f"{patient} {study}: no results, nothing written.")

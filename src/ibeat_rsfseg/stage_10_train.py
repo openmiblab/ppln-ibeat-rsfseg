@@ -20,8 +20,6 @@ def run(build, fold=0):
     os.environ["nnUNet_preprocessed"] = preproc_data
     os.environ["nnUNet_results"] = results
 
-    # Half the number of CPU cores
-    # os.environ['nnUNet_n_proc_DA'] = '4' # Set in .sh file
 
     # https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/how_to_use_nnunet.md
 

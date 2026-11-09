@@ -32,7 +32,10 @@ CODE="/mnt/parscratch/users/$(whoami)/scripts/ppln-ibeat-rsfseg/src/ibeat_rsfseg
 BUILD="/mnt/parscratch/users/$(whoami)/data/iBEAt_Build"
 ARCHIVE="logina:/shared/abdominal_imaging/Shared/Benthe/iBEAt_Build"
 
+
 # srun runs your program on the allocated compute resources managed by Slurm
 srun "$ENV/bin/python" "$CODE/stage_8_build_training_data.py" --build="$BUILD"
 rsync -av --no-group --no-perms "$BUILD/rsfseg/stage_8_build_training_data" "$ARCHIVE/rsfseg"
+rsync -rlt --no-group --no-perms "$BUILD/rsfseg/stage_8_scratch" "$ARCHIVE/rsfseg"
+
 

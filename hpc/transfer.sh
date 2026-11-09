@@ -32,5 +32,5 @@ CODE="/mnt/parscratch/users/$(whoami)/scripts/ppln-ibeat-rsfseg/src/ibeat_rsfseg
 BUILD="/mnt/parscratch/users/$(whoami)/data/iBEAt_Build"
 ARCHIVE="logina:/shared/abdominal_imaging/Shared/Benthe/iBEAt_Build"
 
-rsync -av --no-group --no-perms "$BUILD/dixon/stage_5_clean_dixon_data/Patients" "$ARCHIVE/dixon/stage_5_clean_dixon_data/Patients"
+rsync -av --no-group --no-perms "$ARCHIVE/rsfseg/Patients/Bari" "$BUILD/rsfseg/Patients"
 

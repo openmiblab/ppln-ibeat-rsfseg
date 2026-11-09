@@ -25,8 +25,7 @@ RSF_CLASS_MAP = {
 
 TASKS = ['rsf_masks']
 
-#SITES = ['Exeter', 'Bari', 'Leeds', 'Bordeaux', 'Turku', 'Sheffield']
-SITES = [ 'Turku_3']
+SITES = ['Exeter', 'Bari', 'Leeds', 'Bordeaux', 'Turku', 'Sheffield']
 
 PREFETCH = 2  # aantal beelden dat alvast wordt ingelezen
 
