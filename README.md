@@ -179,6 +179,7 @@ python -m rsfseg.stage_3_measure --build=$data
 ## 🎨 Stage 4: Edit autosegmented masks
 
 
+![Image Description](_static/napari_kidneys.png)
 
 This stage is interactive and will allow you to edit autosegmented masks with a graphical user interface. Results will be saved in a folder called *stage_4_edit*.
 
@@ -204,7 +205,7 @@ python -m rsfseg.stage_4_edit --build=$data --plane sagittal
 ---
 ## 📸 Stage 5: Build mosaic displays of edited organs
 
-
+![Image Description](_static/napari_stage_5_mosaic.png)
 
 After editing some or all of your masks, you can build mosaic displays of the edited renal sinus fat. Results will be saved in a folder called *stage_5_display*. This is similar to building mosaics in step 2, except that this will pick up edited rather than autosegmented renal sinus fat.
 
