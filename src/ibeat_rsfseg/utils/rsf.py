@@ -6,7 +6,7 @@ import cv2
 import skimage
 import scipy.ndimage as ndi
 import matplotlib
-matplotlib.use('Agg')  # geen scherm nodig, alleen wegschrijven
+matplotlib.use('Agg')  # no display needed, only saving to file
 import matplotlib.pyplot as plt
 
 
@@ -23,14 +23,14 @@ def renal_sinus_fat(fat, water, kidneys, fixed_threshold=0.5, bounded=False,
     """Compute renal sinus fat mask via convex hull of the kidney mask.
 
     fat: numpy array, fat-channel Dixon volume
-    water: numpy array, water-channel Dixon volume, zelfde shape als
-        `fat`. Wordt samen met `fat` gebruikt om de fat fraction map te
-        berekenen (fat / (fat + water)); de fat/non-fat classificatie
-        gebeurt op die fractiemap, niet op de ruwe fat-channel.
+    water: numpy array, water-channel Dixon volume, same shape as
+        `fat`. Used together with `fat` to compute the fat fraction map
+        (fat / (fat + water)); the fat/non-fat classification is done on
+        that fraction map, not on the raw fat channel.
     kidneys: numpy array, kidney label mask (1=left, 2=right kidney)
-    fixed_threshold: float, drempel op de fat fraction map: voxels met
-        fat_fraction > fixed_threshold worden als vet beschouwd (geen
-        Otsu/median_otsu meer).
+    fixed_threshold: float, threshold on the fat fraction map: voxels
+        with fat_fraction > fixed_threshold are considered fat (no more
+        Otsu/median_otsu).
     bounded: bool, if True the convex hull is additionally restricted to
         stay within `max_dilation` pixels of the kidney mask, to avoid
         leakage into pararenal fat through open sides of the sinus
@@ -54,8 +54,8 @@ def renal_sinus_fat(fat, water, kidneys, fixed_threshold=0.5, bounded=False,
     margin: int, padding (in voxels, in-plane) added around each kidney
         hull's bounding box before thresholding the fat fraction map.
     median_radius: int, only used if `apply_median_filter=True`: radius
-        van de `scipy.ndimage` mediaanfilter die vóór het drempelen op
-        de fat-fraction crop wordt toegepast.
+        of the `scipy.ndimage` median filter that is applied to the
+        fat-fraction crop before thresholding.
     apply_median_filter: bool, if True (default), a
         `2*median_radius+1`-sized in-plane median filter is applied to
         the fat-fraction crop before thresholding, for noise
@@ -70,8 +70,8 @@ def renal_sinus_fat(fat, water, kidneys, fixed_threshold=0.5, bounded=False,
     """
     rsf = np.zeros(kidneys.shape)
 
-    # Fat fraction map: alle thresholding gebeurt hierop, in plaats van
-    # op de ruwe fat-channel.
+    # Fat fraction map: all thresholding is done on this, instead of
+    # on the raw fat channel.
     fat_fraction = _fat_fraction_map(fat, water)
 
     for kidney in [1, 2]:
@@ -87,8 +87,8 @@ def renal_sinus_fat(fat, water, kidneys, fixed_threshold=0.5, bounded=False,
             logging.error(f"Convex hull failed fo label {kidney}: {e}")
             continue
 
-        # Fat/non-fat classification: vaste drempel op de fat-fraction
-        # map, per kidney, binnen een crop rond de convex hull.
+        # Fat/non-fat classification: fixed threshold on the fat-fraction
+        # map, per kidney, within a crop around the convex hull.
         fat_mask = _fixed_threshold_mask(
             fat_fraction, kidney_hull, threshold=fixed_threshold,
             margin=margin, median_radius=median_radius,
@@ -128,10 +128,10 @@ def renal_sinus_fat(fat, water, kidneys, fixed_threshold=0.5, bounded=False,
 
 
 def _fat_fraction_map(fat, water, eps=1e-6):
-    """Fat fraction map: fat / (fat + water), geclipt naar [0, 1].
+    """Fat fraction map: fat / (fat + water), clipped to [0, 1].
 
-    eps voorkomt division-by-zero in achtergrondvoxels waar zowel fat
-    als water ~0 zijn.
+    eps prevents division by zero in background voxels where both fat
+    and water are ~0.
     """
     fat = fat.astype(float)
     water = water.astype(float)
@@ -141,19 +141,19 @@ def _fat_fraction_map(fat, water, eps=1e-6):
 
 def _fixed_threshold_mask(fat_fraction, hull, threshold=0.5, margin=10,
                            median_radius=1, apply_median_filter=True):
-    """Vaste-drempel fat mask op de fractiemap: voxels met
-    fat_fraction > threshold worden als vet beschouwd. Geen median_otsu.
+    """Fixed-threshold fat mask on the fraction map: voxels with
+    fat_fraction > threshold are considered fat. No median_otsu.
 
-    Beperkt tot de bounding box rond de kidney hull (+margin), puur om
-    het rekenwerk te beperken -- de drempel zelf is niet
-    data-afhankelijk, dus een crop is functioneel niet nodig, maar dit
-    houdt gedrag/timing consistent met de lokale Otsu-variant.
+    Restricted to the bounding box around the kidney hull (+margin), purely
+    to limit computation -- the threshold itself is not data-dependent,
+    so a crop is functionally unnecessary, but this keeps behaviour/timing
+    consistent with the local Otsu variant.
 
-    Als `apply_median_filter=True` wordt vóór het drempelen een
-    2*median_radius+1-grote 2D-mediaanfilter (per slice, in-plane) op de
-    crop toegepast, voor ruisonderdrukking vergelijkbaar met wat
-    `median_otsu` intern doet. Zet op False om de rauwe fractiewaarden
-    direct te drempelen.
+    If `apply_median_filter=True`, a 2D median filter of size
+    2*median_radius+1 (per slice, in-plane) is applied to the crop before
+    thresholding, for noise suppression comparable to what `median_otsu`
+    does internally. Set to False to threshold the raw fraction values
+    directly.
     """
     fat_mask = np.zeros(fat_fraction.shape, dtype=float)
     bbox = _bbox_from_mask(hull, margin=margin)
@@ -175,8 +175,8 @@ def _fixed_threshold_mask(fat_fraction, hull, threshold=0.5, margin=10,
 
 
 def _bbox_from_mask(mask, margin=10):
-    """Bounding box (tuple van slices) van `mask`, met `margin` voxels
-    extra aan elke kant (geclipt aan de array-grenzen). None als leeg."""
+    """Bounding box (tuple of slices) of `mask`, with `margin` extra
+    voxels on each side (clipped to the array bounds). None if empty."""
     coords = np.argwhere(mask)
     if coords.size == 0:
         return None
@@ -292,9 +292,9 @@ def _restrict_hull_by_pole_line(mask_slice, hull_slice, min_notch_depth=3):
     if defects is None or len(defects) == 0:
         return hull_slice, None
 
-    # Sommige OpenCV-builds/versies geven hier een (N, 4)-array terug in
-    # plaats van de gedocumenteerde (N, 1, 4). Normaliseer dat hier zodat
-    # de indexing hieronder altijd klopt.
+    # Some OpenCV builds/versions return an (N, 4) array here instead of
+    # the documented (N, 1, 4). Normalise it here so that the indexing
+    # below is always correct.
     defects = np.asarray(defects)
     if defects.ndim == 2:
         defects = defects[:, np.newaxis, :]
@@ -318,23 +318,23 @@ def _restrict_hull_by_pole_line(mask_slice, hull_slice, min_notch_depth=3):
 
 
 def _extract_largest_cluster_3d(array):
-    structure = np.ones((3, 3, 3))  # 26-connectiviteit i.p.v. default 6
+    structure = np.ones((3, 3, 3))  # 26-connectivity instead of default 6
     label_img, cnt = ndi.label(array, structure=structure)
     sizes = ndi.sum(array, label_img, index=range(1, cnt + 1))
     max_label = np.argmax(sizes) + 1
     return label_img == max_label
 
 def _extract_significant_clusters_3d(array, min_size_fraction=0, min_size_voxels=2):
-    """Behoud alle 3D-samenhangende componenten boven een minimumgrootte,
-    in plaats van alleen de allergrootste. Renaal sinusvet zit vaak
-    opgesplitst in meerdere aparte pockets door de doorkruisende
-    nierarterie/-vene/ureter; alleen de grootste component bewaren gooit
-    echt sinusvet weg dat toevallig niet de grootste pocket is.
+    """Keep all 3D-connected components above a minimum size, instead of
+    only the very largest one. Renal sinus fat is often split into
+    several separate pockets by the traversing renal artery/vein/ureter;
+    keeping only the largest component discards real sinus fat that
+    happens not to be the largest pocket.
 
-    min_size_fraction: componenten kleiner dan deze fractie van de
-        grootste component worden weggegooid.
-    min_size_voxels: absolute ondergrens (in voxels) om losse
-        ruis-pixels alsnog te filteren, ongeacht de fractie hierboven.
+    min_size_fraction: components smaller than this fraction of the
+        largest component are discarded.
+    min_size_voxels: absolute lower bound (in voxels) to still filter out
+        isolated noise pixels, regardless of the fraction above.
     """
     structure = np.ones((3, 3, 3))
     label_img, cnt = ndi.label(array, structure=structure)
