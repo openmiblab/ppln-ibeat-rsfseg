@@ -205,7 +205,7 @@ python -m rsfseg.stage_4_edit --build=$data --plane sagittal
 ---
 ## 📸 Stage 5: Build mosaic displays of edited organs
 
-![Image Description](_static/napari_stage_5_mosaic.png)
+![Image Description](_static/stage_5_mosaic.png)
 
 After editing some or all of your masks, you can build mosaic displays of the edited renal sinus fat. Results will be saved in a folder called *stage_5_display*. This is similar to building mosaics in step 2, except that this will pick up edited rather than autosegmented renal sinus fat.
 
