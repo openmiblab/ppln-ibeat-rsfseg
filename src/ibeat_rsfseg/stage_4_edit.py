@@ -26,36 +26,24 @@ RSF_CLASS_MAP = {
 TASKS = ['rsf_masks']
 
 SITES = ['Exeter', 'Bari', 'Leeds', 'Bordeaux', 'Turku', 'Sheffield']
+PREFETCH = 2  # Number of images that are read at the same time to make it faster
 
-PREFETCH = 2  # aantal beelden dat alvast wordt ingelezen
-
-# Pogingen en wachttijd (s) bij een tijdelijk geblokkeerde index.json
 RETRIES = 6
 RETRY_DELAY = 2.0
-
-# Alle toegang tot de data-/mask-databases (index.json) loopt via dit slot.
-# dbdicom schrijft index.json bij elke close(), en write_volume(ref=...) opent
-# de data-database opnieuw. Zonder slot lezen reader en writer tegelijk en
-# schrijven ze tegelijk dezelfde index.json -> half bestand / toegangsfout.
 DB_LOCK = threading.RLock()
-
-# Eén geopende database per pad (alleen voor lezen; wordt nooit teruggeschreven)
 _READ_DBS = {}
-
-# Eén geopende edit-database per pad (alleen gebruikt door de writer-thread)
 _WRITE_DBS = {}
 
 
 class _CachedRef:
-    """Stand-in voor de DataBaseDicom die write_volume(ref=...) zelf aanmaakt.
+    """Stand-in for the DataBaseDicom that write_volume(ref=...) creates itself.
 
-    dbdicom.dbd.write_volume doet bij elke aanroep DataBaseDicom(ref[0]) en
-    daarna ref_mgr.close(). Dat betekent: de hele index.json van de data-
-    database opnieuw inlezen en weer terugschrijven, voor elk masker. Als die
-    index.json dan niet leesbaar is (net geschreven, geblokkeerd), verwijdert
-    dbdicom hem en leest het de HELE dicom-folder opnieuw in.
-    Hier geven we in plaats daarvan de al ingelezen register terug, en is
-    close() een no-op.
+    On every call, dbdicom.dbd.write_volume does DataBaseDicom(ref[0]) and
+    then ref_mgr.close(). That means: re-reading the entire index.json of the
+    data database and writing it back again, for every single mask. If that
+    index.json is then unreadable (just written, locked), dbdicom deletes it
+    and re-reads the ENTIRE dicom folder.
+    Here we return the already loaded register instead, and close() is a no-op.
     """
     def __init__(self, dbd):
         self.register = dbd.register
@@ -85,7 +73,7 @@ _patch_dbdicom_ref()
 
 
 def _retry(fn, what, attempts=RETRIES, delay=RETRY_DELAY):
-    """Voer fn uit; probeer opnieuw bij een tijdelijk geblokkeerd bestand."""
+    """Run fn; retry if a file is temporarily locked."""
     for i in range(1, attempts + 1):
         try:
             return fn()
@@ -93,18 +81,18 @@ def _retry(fn, what, attempts=RETRIES, delay=RETRY_DELAY):
             if i == attempts:
                 raise
             logging.warning(
-                f"{what}: poging {i}/{attempts} mislukt ({e}); "
-                f"opnieuw over {delay * i:.0f}s"
+                f"{what}: attempt {i}/{attempts} failed ({e}); "
+                f"retrying in {delay * i:.0f}s"
             )
             time.sleep(delay * i)
 
 
 
 def _key(s):
-    """Sleutel zonder volgnummers: (patient, studienaam, serienaam).
+    """Key without sequence numbers: (patient, study name, series name).
 
-    s heeft de vorm [pad, patient, (study, n), (series, m)]. De volgnummers
-    (n, m) kunnen per database verschillen, dus daar vergelijken we niet op.
+    s has the form [path, patient, (study, n), (series, m)]. The sequence
+    numbers (n, m) can differ per database, so we do not compare on those.
     """
     return (str(s[1]), s[2][0], s[3][0])
 
@@ -114,7 +102,7 @@ def run(build, logfile, plane='coronal'):
     maskpath = os.path.join(build, 'rsfseg', 'stage_1_segment')
     editpath = os.path.join(build, 'rsfseg', 'stage_4_edit')
 
-    # Stap 1: bouw één keer de volledige takenlijst
+    # Step 1: build the complete task list once
    # sites = [('Controls',)] + [('Patients', s) for s in SITES]
     sites = [('Patients', s) for s in SITES]
     jobs = []
@@ -126,21 +114,21 @@ def run(build, logfile, plane='coronal'):
                 os.path.join(editpath, *parts),
                 task,
             )
-    logging.info(f"{len(jobs)} maskers te bewerken")
+    logging.info(f"{len(jobs)} masks to edit")
 
-    # Stap 2: bewerken, met inlezen en schrijven op de achtergrond
+    # Step 2: edit, with reading and writing in the background
     process(jobs, plane)
 
 def _read_db(path):
-    """Geef een gecachte, alleen-lezen database terug (leest index.json 1x).
+    """Return a cached, read-only database (reads index.json once).
 
-    db.open gebeurt buiten DB_LOCK, zodat meerdere databases tegelijk
-    kunnen worden ingelezen. Het slot beschermt alleen de cache.
+    db.open happens outside DB_LOCK, so that multiple databases can be
+    loaded at the same time. The lock only protects the cache.
     """
     with DB_LOCK:
         dbd = _READ_DBS.get(path)
     if dbd is None:
-        dbd = _retry(lambda: db.open(path), f"openen {path}")
+        dbd = _retry(lambda: db.open(path), f"opening {path}")
         with DB_LOCK:
             dbd = _READ_DBS.setdefault(path, dbd)
     return dbd
@@ -152,7 +140,7 @@ def collect_jobs(sitedatapath, sitemaskpath, siteeditpath, task):
 
     record = data.dixon_record()
 
-    # Data-, mask- en edit-index parallel inlezen (netwerk-I/O)
+    # Read data, mask and edit indices in parallel (network I/O)
     def timed(label, fn):
         t0 = time.perf_counter()
         result = fn()
@@ -163,7 +151,7 @@ def collect_jobs(sitedatapath, sitemaskpath, siteeditpath, task):
         try:
             return {repr(s) for s in _read_db(siteeditpath).series()}
         except Exception:
-            return set()  # edit-database bestaat nog niet
+            return set()  # edit database does not exist yet
 
     t_start = time.perf_counter()
     with ThreadPoolExecutor(max_workers=3) as ex:
@@ -175,7 +163,7 @@ def collect_jobs(sitedatapath, sitemaskpath, siteeditpath, task):
         all_series = f_data.result()
         mask_all = f_mask.result()
         done = f_done.result()
-    logging.info(f"alle indexen ingelezen: {time.perf_counter() - t_start:.1f}s")
+    logging.info(f"all indices read: {time.perf_counter() - t_start:.1f}s")
 
     all_series_keys = {repr(s) for s in all_series}
     all_out_phase = [s for s in all_series
@@ -183,7 +171,7 @@ def collect_jobs(sitedatapath, sitemaskpath, siteeditpath, task):
     out_phase_series = [s for s in all_out_phase if s[3][1] == 0]
     n_dup = len(all_out_phase) - len(out_phase_series)
     if n_dup:
-        logging.info(f"{sitedatapath}: {n_dup} dubbele out-phase series (index > 0) overgeslagen")
+        logging.info(f"{sitedatapath}: skipped {n_dup} duplicate out-phase series (index > 0)")
 
     masks = {(str(s[1]), s[2][0]): s
              for s in mask_all if s[3][0] == task}
@@ -199,7 +187,7 @@ def collect_jobs(sitedatapath, sitemaskpath, siteeditpath, task):
         study = series_op[2][0]
         sequence = series_op[3][0][:-len('_out_phase')]
 
-        # Goedkoopste controles eerst: bestaat er een masker, en is het nog niet bewerkt?
+        # Cheapest checks first: does a mask exist, and has it not been edited yet?
         mask_series = masks.get((str(patient), study))
         if mask_series is None:
             continue
@@ -208,11 +196,11 @@ def collect_jobs(sitedatapath, sitemaskpath, siteeditpath, task):
         if repr(edited_mask_series) in done:
             continue
 
-        # Alleen de geselecteerde dixon-sequence
+        # Only the selected dixon sequence
         if sequence != data.dixon_series_desc(record, patient, study):
             continue
 
-        # Zoals in stage_1: fat is de referentie; water is de terugval-afbeelding
+        # As in stage_1: fat is the reference; water is the fallback image
         series_fat = series_op[:3] + [(sequence + '_fat', 0)]
         if repr(series_fat) not in all_series_keys:
             logging.info(f"{patient} {study}: fat series not found, skipping.")
@@ -230,19 +218,19 @@ def collect_jobs(sitedatapath, sitemaskpath, siteeditpath, task):
             'label_series': mask_series,
             'edited_series': edited_mask_series,
         })
-    logging.info(f"job-loop: {time.perf_counter() - t_loop:.1f}s, {len(jobs)} jobs")
+    logging.info(f"job loop: {time.perf_counter() - t_loop:.1f}s, {len(jobs)} jobs")
     return jobs
 
 
 def _read_volume(series):
-    """Lees een volume via de gecachte database (schrijft index.json niet)."""
+    """Read a volume via the cached database (does not write index.json)."""
     with DB_LOCK:
         dbd = _read_db(series[0])
         return dbd.volume(series, None, 0)
 
 
 def load_job(job):
-    """Draait in de reader-thread: alleen data- en mask-database."""
+    """Runs in the reader thread: only the data and mask databases."""
     try:
         op = _read_volume(job['series_op'])
     except Exception as e:
@@ -273,26 +261,26 @@ def load_job(job):
 
 
 def write_job(vol, edited_series, ref):
-    """Draait in de writer-thread: schrijft naar de edit-database.
+    """Runs in the writer thread: writes to the edit database.
 
-    write_volume opent met ref=... ook de data-database en schrijft daar
-    index.json terug. Dat gebeurt onder DB_LOCK zodat de reader-thread niet
-    tegelijk dezelfde index.json leest of schrijft.
+    With ref=..., write_volume also opens the data database and writes
+    index.json back there. This happens under DB_LOCK so that the reader
+    thread does not read or write the same index.json at the same time.
     """
     path = edited_series[0]
     dbd = _WRITE_DBS.get(path)
     if dbd is None:
-        dbd = _retry(lambda: db.open(path), f"openen {path}")
+        dbd = _retry(lambda: db.open(path), f"opening {path}")
         _WRITE_DBS[path] = dbd
     with DB_LOCK:
         dbd.write_volume(vol, edited_series, ref=ref, verbose=0)
-    # index.json van de edit-database wegschrijven, met herpogingen
-    # (close() is herhaalbaar zonder gevolgen)
-    _retry(dbd.close, f"schrijven index.json {edited_series[0]}")
+    # Write the index.json of the edit database, with retries
+    # (close() can safely be called repeatedly)
+    _retry(dbd.close, f"writing index.json {edited_series[0]}")
 
-    # Melding pas nadat het masker echt is opgeslagen
+    # Report only after the mask has actually been saved
     msg = (
-        f"Opgeslagen: patient {edited_series[1]}, studie {edited_series[2][0]} "
+        f"Saved: patient {edited_series[1]}, study {edited_series[2][0]} "
         f"-> {edited_series[0]}"
     )
     logging.info(msg)
@@ -323,7 +311,7 @@ def process(jobs, plane):
         refill()
         for _ in tqdm(range(len(jobs))):
             job, fut = queue.popleft()
-            refill()  # volgende beelden alvast inlezen tijdens het editen
+            refill()  # start reading the next images while editing
 
             loaded = fut.result()
             if loaded is None:
@@ -343,7 +331,7 @@ def process(jobs, plane):
                     writer.submit(write_job, vol, job['edited_series'], job['series_fat'])
                 )
 
-        # Wachten tot alles is weggeschreven en fouten zichtbaar maken
+        # Wait until everything has been written and surface any errors
         for wf in write_futures:
             try:
                 wf.result()

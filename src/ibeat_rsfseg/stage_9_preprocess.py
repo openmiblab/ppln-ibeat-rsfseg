@@ -15,7 +15,7 @@ SEED = 42
 
 
 def make_patient_splits(cases, case_to_patient, n_folds=N_FOLDS, seed=SEED):
-    """Group k-fold: all cases of one patient end up in the same fold.
+    """Group k-fold: all cases of one patient/volunteer end up in the same fold.
 
     Patients are shuffled (fixed seed, so reproducible) and assigned one by
     one to the fold that currently has the fewest cases, which keeps the

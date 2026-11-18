@@ -42,5 +42,5 @@ echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 srun "$ENV/bin/python" "$CODE/stage_10_train.py" --build="$BUILD" --fold=$FOLD
 
 rsync -av --no-group --no-perms \
-    "$BUILD/rsfseg/stage_10_train/$MODEL/fold_$FOLD" \
-    "$ARCHIVE/rsfseg/stage_10_train/$MODEL/"
+    "$BUILD/rsfseg/stage_10_train" \
+    "$ARCHIVE/rsfseg/"

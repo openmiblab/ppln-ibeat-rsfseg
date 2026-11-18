@@ -67,9 +67,9 @@ if __name__ == '__main__':
     parser.add_argument("--build", type=str, default=BUILD, help="Build folder")
     args = parser.parse_args()
 
-    os.makedirs(os.path.join(args.build, 'rsf'), exist_ok=True)
+    os.makedirs(os.path.join(args.build, 'rsfseg'), exist_ok=True)
     logging.basicConfig(
-        filename=os.path.join(args.build, 'rsf', f'{STAGE}.log'),
+        filename=os.path.join(args.build, 'rsfseg', f'{STAGE}.log'),
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
     )
