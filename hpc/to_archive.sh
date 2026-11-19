@@ -11,17 +11,17 @@
 # This ensure that the second command is only run if the first succeeds
 set -euo pipefail
 
-SHARED="logina:/shared/abdominal_imaging/Shared/Benthe/iBEAt_Build/rsfseg"
+SHARED="logina:/shared/abdominal_imaging/Shared/Benthe/iBEAt_Build"
 ARCHIVE="logina:/shared/abdominal_imaging/Archive/iBEAt_Build"
 STAGING="/mnt/parscratch/users/$(whoami)/data/iBEAt_Build"
 
 echo "Step 1: shared -> staging"
-rsync -av --partial --no-group --no-perms "$SHARED" "$STAGING"
+rsync -av --partial --no-group --no-perms --delete "$SHARED/rsfseg" "$STAGING"
 
 echo "Step 2: staging -> archive"
-rsync -av --partial --no-group --no-perms "$STAGING/rsfseg" "$ARCHIVE"
+rsync -av --partial --no-group --no-perms --delete "$STAGING/rsfseg" "$ARCHIVE"
 
 echo "Done"
 
-# Check this before deleting the stat=ging folder
+# Check this before deleting the staging folder
 # rsync -avnc --no-group --no-perms "$STAGING/rsfseg" "$ARCHIVE"
