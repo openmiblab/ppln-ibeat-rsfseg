@@ -1,4 +1,4 @@
-"""Extra figures for the RSF segmentation paper: small reference volumes and Dice versus volume.
+"""Extra figures for the RSF segmentation paper: small and large reference volumes and Dice versus volume.
 
 Put this file next to make_figures.py (it imports its constants and helpers) and run it on the
 same results_summary.xlsx.
@@ -13,11 +13,15 @@ Figures (in <folder of the xlsx>/figures):
                               axial for axial) where the structure is largest, with a tight crop
                               around it. Radiological view: patient right on the left of the image,
                               superior up (coronal) or anterior up (axial).
+    large_<side>_<case>       (--build --min-ref-ml 40) One figure per examination with a reference
+                              volume above --min-ref-ml, sorted from large to small volume. Whole
+                              field of view, reference and prediction side by side, no marker.
 
 Usage:
     python make_figures_small_volume.py --xlsx <path>/results_summary.xlsx
     python make_figures_small_volume.py --xlsx <path>/results_summary.xlsx --build <iBEAt_Build>
     python make_figures_small_volume.py --xlsx ... --build ... --side both --max-ref-ml 2 --anonymise
+    python make_figures_small_volume.py --xlsx ... --build ... --side both --min-ref-ml 40 --anonymise
 """
 
 import os
@@ -456,10 +460,12 @@ def fragment_figure(row, cls, raw, pred_dir, thr, margin, min_size, plane, anony
     mf.save(fig, base, formats, dpi)
 
 
-def small_overview_figure(row, cls, raw, pred_dir, plane, anonymise, base, formats, dpi, panel_width=5.2):
-    """Small-volume case on the whole field of view: reference and prediction side by side, in the
-    slice where the structure (reference + prediction) is largest. Contours of both classes are
-    drawn on that slice only. The yellow circle marks the structure of interest."""
+def small_overview_figure(row, cls, raw, pred_dir, plane, anonymise, base, formats, dpi, panel_width=5.2,
+                          marker=True):
+    """Case on the whole field of view: reference and prediction side by side, in the slice where
+    the structure (reference + prediction) is largest. Contours of both classes are drawn on that
+    slice only. With marker=True (small volumes) a yellow circle marks the structure of interest;
+    with marker=False (large volumes) there is no circle and volumes are given with 1 decimal."""
     from matplotlib.patches import Circle
     case = row['case']
     k = CLASS_ID[cls]
@@ -483,15 +489,16 @@ def small_overview_figure(row, cls, raw, pred_dir, plane, anonymise, base, forma
     vmax = max(np.percentile(bg, 99.5), 1e-6)
     t2 = plane_slice(target, plane, s)
     circle = None
-    if t2.any():
+    if marker and t2.any():
         rr, cc = np.where(t2)
         circle = ((cc.mean() + 0.5) * zh, (rr.mean() + 0.5) * zv,
                   max(10.0, 0.5 * max(np.ptp(cc) * zh, np.ptp(rr) * zv) + 8.0))
 
+    dec = 2 if marker else 1
     info = f'{cls.capitalize()}: Dice {row[f"dice_{cls}"]:.2f}'
     if np.isfinite(row.get(f'hd95_mm_{cls}', np.nan)):
         info += f', HD95 {row[f"hd95_mm_{cls}"]:.1f} mm'
-    info += f'\nref {row[f"vol_ref_ml_{cls}"]:.2f} mL, pred {row[f"vol_pred_ml_{cls}"]:.2f} mL'
+    info += f'\nref {row[f"vol_ref_ml_{cls}"]:.{dec}f} mL, pred {row[f"vol_pred_ml_{cls}"]:.{dec}f} mL'
     if not anonymise:
         info += f'\n{case}'
     top_in, bot_in = 0.45 + 0.2 * (info.count('\n') + 1), 0.7
@@ -683,6 +690,9 @@ def main():
     p.add_argument('--dpi', type=int, default=300)
     p.add_argument('--max-ref-ml', type=float, default=2.0,
                    help='Make a figure per examination with a reference volume below this (mL)')
+    p.add_argument('--min-ref-ml', type=float, default=None,
+                   help='Also make a figure per examination with a reference volume above this (mL), '
+                        'e.g. 40 (files large_<side>_<case>, sorted from large to small volume)')
     p.add_argument('--linear', action='store_true',
                    help='Also make fig_dice_vs_volume_linear (linear x axis) next to the log version')
     p.add_argument('--hd95-mm', type=float, default=20.0,
@@ -786,9 +796,25 @@ def main():
                     overview_figure(row, cls, raw, pred_dir, args.hd95_mm, args.plane, args.anonymise,
                                     base, args.formats, args.dpi)
 
+    sides = mf.CLASSES if args.side == 'both' else [args.side]
+
+    if args.min_ref_ml is not None:
+        print(f'Large-volume figures: full field of view, {args.plane}, background = {BG[1]}')
+        for cls in sides:
+            large = df[(df[f'vol_ref_ml_{cls}'] > args.min_ref_ml) & df[f'dice_{cls}'].notna()]
+            large = large.sort_values(f'vol_ref_ml_{cls}', ascending=False).reset_index(drop=True)
+            print(f'{cls}: {len(large)} of {int(df[f"dice_{cls}"].notna().sum())} examinations '
+                  f'with reference volume > {args.min_ref_ml:g} mL')
+            for i, (_, row) in enumerate(large.iterrows(), start=1):
+                tag = f'{i:02d}' if args.anonymise else str(row['case'])
+                print(f'  {i:02d}  {row["case"]}  ref {row[f"vol_ref_ml_{cls}"]:.1f} mL  '
+                      f'Dice {row[f"dice_{cls}"]:.2f}')
+                small_overview_figure(row, cls, raw, pred_dir, args.plane, args.anonymise,
+                                      os.path.join(out, f'large_{cls}_{tag}'),
+                                      args.formats, args.dpi, marker=False)
+
     print(f'Case figures: {"zoomed crop (--zoom)" if args.zoom else "full field of view, reference and prediction side by side"}, '
           f'{args.plane}, background = {BG[1]}')
-    sides = mf.CLASSES if args.side == 'both' else [args.side]
     for cls in sides:
         small = df[(df[f'vol_ref_ml_{cls}'] < args.max_ref_ml) & df[f'dice_{cls}'].notna()]
         small = small.sort_values(f'vol_ref_ml_{cls}').reset_index(drop=True)
