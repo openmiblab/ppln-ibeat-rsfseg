@@ -67,7 +67,7 @@ def save_overlay(background, labels, png):
     mosaic_overlay(background, rois, png, vmin=0, vmax=1.0, margin=[16, 16, 2], opacity=0.75)
 
 
-def load_predictor(model_folder, folds):
+def load_predictor(model_folder, folds:int): # folds in [0, 1, 2, 3, 4] or 'all'
     """Load the packaged model from stage 12 for the given folds."""
     # nnunetv2 is imported here, after the environment variables are set in run()
     import torch
@@ -159,8 +159,8 @@ def test_cases(get_predictor, cases, images, labels, out_dir, rows, tag):
     if todo:
         predictor = get_predictor()
         predictor.predict_from_files(
-            [files[i] for i in todo],
-            [os.path.join(pred_dir, cases[i]) for i in todo],
+            [files[i] for i in todo], # input
+            [os.path.join(pred_dir, cases[i]) for i in todo], # output
             save_probabilities=False,
             overwrite=True,
             num_processes_preprocessing=2,
