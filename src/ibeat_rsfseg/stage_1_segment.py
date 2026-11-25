@@ -6,8 +6,7 @@ import dbdicom as db
 from miblab import pipe
 
 from utils import data
-from utils import rsf_original as rsf
-from utils import rsf as rsf_new  # new settings for RSF calculation
+from utils import rsf
 
 PIPELINE = 'rsfseg'
 
@@ -80,13 +79,11 @@ def run_site(build, group, site=None):
             logging.exception(f"Error reading data for {patient_op} {sequence}: {e}")
             continue
 
-        # Perform convex hull RSF calculation
+        # Convex hull RSF calculation with fixed fat fraction threshold
         try:
-            rsf_values =rsf_new.renal_sinus_fat(
+            rsf_values = rsf.renal_sinus_fat(
                 fat.values, water.values, kidney_label.values,
-                fixed_threshold=FIXED_THRESHOLD, bounded=False, max_dilation=8,
-                pole_cut=None, pole_cut_planes=('sagittal',), min_notch_depth=3,
-                margin=0, median_radius=1, save_mosaic=None,
+                fixed_threshold=FIXED_THRESHOLD,
             )
         except Exception as e:
             logging.exception(f"Error computing RSF for {patient_op} {sequence}: {e}")
@@ -94,7 +91,6 @@ def run_site(build, group, site=None):
 
         # Save results
         db.write_volume((rsf_values, fat.affine), mask_series, ref=series_fat, verbose=0)
-
 
 
 if __name__ == '__main__':

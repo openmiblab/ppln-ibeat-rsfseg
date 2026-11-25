@@ -33,7 +33,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-import make_figures as mf
+import ibeat_rsfseg.utils.make_figures as mf
 
 CLASS_ID = {'left': 1, 'right': 2}
 # Background image of the case figures: (channel in imagesTr, panel title). Set by --background.
