@@ -219,7 +219,7 @@ python -m rsfseg.stage_5_display --build=$data
 **Note**: if the renal sinus fat you asked for is not there, this will silently be skipped. It will not cause an error.
 
 ---
-## 📐 Stage 6: Measure edited 
+##  Stage 6: Measure edited 
 
 ![Image Description](_static/measure.png)
 
@@ -231,4 +231,67 @@ Measure:
 python -m rsfseg.stage_6_measure --build=$data
 ```
 
-. The file organisation is the same as in stage 2.
+The file organisation is the same as in stage 2.
+
+
+---
+## 🏗️ Stage 8: Build training data 
+
+This stage build nnU-Net training data from the edited RSF masks. 
+Channels: out_phase, in_phase, water, fat, fat fraction (noNorm). 
+Labels : edited masks from stage_4_edit (left = 1, right = 2)
+
+```bash
+python -m rsfseg.stage_8_build_training_data --build=$data
+```
+
+---
+## ⚙️ Stage 9: Preprocess 
+
+This prepares the training data for the nnU-Net segmentation (Dataset001_iBEAtRSF) and creates the cross-validation splits. It does two things:
+
+1. nnU-Net preprocessing
+   It runs nnUNetv2_plan_and_preprocess for the 3d_fullres configuration with --verify_dataset_integrity. This checks the dataset, generates a preprocessing plan and preprocesses the images. 
+2. Patient-grouped splits (splits_final.json)
+  By default, nnU-Net creates a random 5-fold split at the case level. Because some patient or volunteers have multiple visits, scans of the same person can end up in both training and validation data (data leakage). This script therefore creates its own split:
+* Cases are mapped to a patient or volunteer via dixon_data.csv.
+* All cases of a sinple patient or volunteer always end up in the same fold (group k-fold, 5 folds).
+* Patients/volunteers are shuffled with a fixed seed (42) and then assigned, largest groups first, to the fold that currently has the fewest cases. This keeps the folds roughly equal in size.
+* A sanity check ensures there is no patient overlap between train and validation in any fold.
+* The result is written to splits_final.json in the preprocessed folder, which nnU-Net used during training.
+
+```bash
+python -m rsfseg.stage_9_preprocess --build=$data --dataset 1 
+```
+
+Data is saved in *stage_9_preprocessed* (preprocessing output and splits_final.json)
+
+---
+## 🏋️ Stage 10: Training (nnU-Net) 
+This script trains all cross-validation fold of the nnU-Net segmentation model (dataset 001, 3d_fullres configuration) and uses the preprocessed data and the patient-grouped splits_final.json created in stage 9. 
+
+```bash
+python -m rsfseg.stage_10_train --build=$data --fold all 
+```
+By changing --fold to 0 - 4 only 1 fold is trained. 
+
+---
+## 🔍 Stage 11: Find best configuration (nnU-Net) 
+This script runs nnU-Nets *nnUNetv2_find_best_configuration* for dataset *001*, restricted to the 3d_fullres configuration. It evaluates the cross-validation results of the trained folds from *stage 10* and determines the best configuration. It also produces the files needed for inference later on. 
+
+```bash
+python -m rsfseg.stage_11_find_configy --build=$data 
+```
+## 🏗️ Stage 12: Build contribution folder
+This script packages the trained nnU-Net model into a lightweight folder that contains only what is needed to run inference. It copies the bare model weights and configuration files from the training output (*stage 10*) into a separate *RSFPredictor* folder, so that the model can be shared or contributed without the large training artefacts.
+
+```bash
+python -m rsfseg.stage_12_build_contribytion --build=$data 
+```
+## 🏗️ Stage 12: Build contribution folder
+This script packages the trained nnU-Net model into a lightweight folder that contains only what is needed to run inference. It copies the bare model weights and configuration files from the training output (*stage 10*) into a separate *RSFPredictor* folder, so that the model can be shared or contributed without the large training artefacts.
+
+```bash
+python -m rsfseg.stage_12_build_contribytion --build=$data 
+```
+
