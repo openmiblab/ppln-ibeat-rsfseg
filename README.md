@@ -1,9 +1,10 @@
-# rsfseg (**NOTE**: PREPOPULATED WITH TOTSEG - NEEDS TO BE ADAPTED!!!)
+---
+## Semi-automated and nnU-Net segmentation of RSF masks
 
 ---
-## Semi-automated segmentation of RSF masks
 
----
+![Image Description](_static/stage_5_mosaic.png)
+
 ## 🛠️ Requirements
 
 What you need to run the scripts in this pipeline:
@@ -297,6 +298,8 @@ This script tests the model packaged in stage 12, fold by fold. It loads the wei
 python -m rsfseg.stage_13_test.py --build=$data --n 3 --folds 0 1 2 3 4 --ensemble
 ```
 
+![Image Description](_static/test_show.png)
+
 ## 🎯 Stage 14: RSF segmentation of the Dixon data
 This script applies the trained renal sinus fat (RSF) model to the cleaned Dixon data of the full cohort, using the *rsf* function from *miblab_dl*. The result is a renal sinus fat label map for each selected scan. 
 
@@ -309,3 +312,5 @@ This script creates rotating 3D displays of the renal sinus fat masks, with the 
 ```bash
 python -m rsfseg.stage_15_displayy3d.py
 ```
+
+![Image Description](_static/3D_images.png)
