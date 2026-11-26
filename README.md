@@ -1,9 +1,8 @@
----
-## An Open-Weights nnU-Net for Renal Sinus Fat segmentation on Dixon MRI
-
----
-
 ![Image Description](_static/stage_5_mosaic.png)
+
+# An Open-Weights nnU-Net for Renal Sinus Fat segmentation on Dixon MRI
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24564436.svg)](https://doi.org/10.5281/zenodo.24564436)
 
 
 ## 🚀 Purpose
