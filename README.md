@@ -1,5 +1,5 @@
 ---
-## Semi-automated and nnU-Net segmentation of RSF masks
+## An Open-Weights nnU-Net for Renal Sinus Fat segmentation on Dixon MRI
 
 ---
 

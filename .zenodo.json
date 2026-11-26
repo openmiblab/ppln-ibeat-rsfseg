@@ -1,7 +1,7 @@
 {
-  "title": "iBEAt kidney volumetry pipeline",
+  "title": "An Open-Weights nnU-Net for Renal Sinus Fat Segmentation on Dixon MRI",
   "upload_type": "software",
-  "description": "See the README on GitHub: https://github.com/openmiblab/ppln-ibeat-rsfseg",
+  "description": "<p>This pipeline trains and validates a deep-learning model (nnU-Net) to segment renal sinus fat on 4-channel Dixon MRI.</p><p>The model is trained using 703 datasets from 549 participants of the iBEAt study on diabetic kidney disease. The data themselves are currently embargoed until the completion of the study.</p><ul><li><b>Deployment:</b> the final model can be deployed via the Python package <a href=\"https://openmiblab.github.io/docs-miblab-dl\">miblab-dl</a>.</li><li><b>More detail:</b> see the <a href=\"https://github.com/openmiblab/ppln-ibeat-rsfseg\">README on GitHub</a>.</li></ul>",
   "creators": [
     {
       "name": "Ariens, Bente",
