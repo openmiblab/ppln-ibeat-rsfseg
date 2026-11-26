@@ -5,6 +5,13 @@
 
 ![Image Description](_static/stage_5_mosaic.png)
 
+
+## 🚀 Purpose
+
+This pipeline trains and validates a deep-learning model (nnUNET) to segment renal sinus fat on 4-channel Dixon. The model is trained using 703 datasets from 549 participants of the iBEAt study on diabetic kidney disease. The data themselves are currently embargoed until the completion of the study. 
+
+The final model can be deployed via the python package [miblab-dl](https://openmiblab.github.io/docs-miblab-dl/).
+
 ## 🛠️ Requirements
 
 What you need to run the scripts in this pipeline:
