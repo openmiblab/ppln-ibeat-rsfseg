@@ -109,6 +109,7 @@ def run(build, logfile, plane='coronal'):
     for parts in sites:
         for task in TASKS:
             jobs += collect_jobs(
+                build,
                 os.path.join(datapath, *parts),
                 os.path.join(maskpath, *parts),
                 os.path.join(editpath, *parts),
@@ -134,11 +135,11 @@ def _read_db(path):
     return dbd
 
 
-def collect_jobs(sitedatapath, sitemaskpath, siteeditpath, task):
+def collect_jobs(build, sitedatapath, sitemaskpath, siteeditpath, task):
     siteeditpath = os.path.join(siteeditpath, task)
     os.makedirs(siteeditpath, exist_ok=True)
 
-    record = data.dixon_record()
+    record = data.dixon_record(build)
 
     # Read data, mask and edit indices in parallel (network I/O)
     def timed(label, fn):

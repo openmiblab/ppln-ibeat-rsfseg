@@ -30,7 +30,7 @@ def run_site(build, group, site=None):
         db_rsf = os.path.join(build, 'rsf', output, group, site)
 
     # List of selected dixon series
-    record = utils.data.dixon_record()
+    record = utils.data.dixon_record(build)
 
     # Get all out_phase series
     dixon_series = db.series(db_dixon)

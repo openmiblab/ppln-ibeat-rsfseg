@@ -6,7 +6,8 @@ import dbdicom as db
 from miblab import pipe
 
 from utils import data
-from utils import rsf
+
+from miblab_dl import rsf_candidates
 
 PIPELINE = 'rsfseg'
 
@@ -32,7 +33,7 @@ def run_site(build, group, site=None):
         rsfpath = os.path.join(build, 'rsfseg', 'stage_1_segment', group, site)
     os.makedirs(rsfpath, exist_ok=True)
 
-    record = data.dixon_record()
+    record = data.dixon_record(build)
 
     all_dixon_series = db.series(dixonpath)
     all_dixon_out_phase_series = [s for s in all_dixon_series if s[3][0][-9:] == 'out_phase']
@@ -81,9 +82,9 @@ def run_site(build, group, site=None):
 
         # Convex hull RSF calculation with fixed fat fraction threshold
         try:
-            rsf_values = rsf.renal_sinus_fat(
+            rsf_values = rsf_candidates(
                 fat.values, water.values, kidney_label.values,
-                fixed_threshold=FIXED_THRESHOLD,
+                fat_threshold=FIXED_THRESHOLD,
             )
         except Exception as e:
             logging.exception(f"Error computing RSF for {patient_op} {sequence}: {e}")

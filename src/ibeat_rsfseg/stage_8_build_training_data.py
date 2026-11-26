@@ -39,6 +39,7 @@ def run(build, logfile):
     group = "Controls"
     for task in TASKS:
         run_site(
+            build,
             os.path.join(datapath, group),
             os.path.join(editpath, group, task),
             database, os.path.join(scratchpath, group), task,
@@ -48,6 +49,7 @@ def run(build, logfile):
     for site in SITES:
         for task in TASKS:
             run_site(
+                build,
                 os.path.join(datapath, group, site),
                 os.path.join(editpath, group, site, task),
                 database, os.path.join(scratchpath, group, site), task,
@@ -56,7 +58,7 @@ def run(build, logfile):
     build_json(database)
 
 
-def run_site(sitedatapath, siteeditpath, database, sitescratchpath, task):
+def run_site(build, sitedatapath, siteeditpath, database, sitescratchpath, task):
 
     images_tr = os.path.join(database, 'imagesTr')
     labels_tr = os.path.join(database, 'labelsTr')
@@ -68,7 +70,7 @@ def run_site(sitedatapath, siteeditpath, database, sitescratchpath, task):
         logging.info(f"{siteeditpath}: no edited masks, skipping.")
         return
 
-    record = data.dixon_record()
+    record = data.dixon_record(build)
     all_dixon_series = db.series(sitedatapath)
 
     # Loop over the edited masks

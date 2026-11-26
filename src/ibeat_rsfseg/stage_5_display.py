@@ -68,7 +68,8 @@ def run(build, logfile):
     displaypath = os.path.join(build, 'rsfseg', 'stage_5_display')
 
     group = "Controls"
-    run_site(os.path.join(datapath, group),
+    run_site(build, 
+             os.path.join(datapath, group),
              os.path.join(maskpath, group, EDIT_TASK),
              os.path.join(kidneyvolpath, group),
              os.path.join(displaypath, group),
@@ -76,7 +77,8 @@ def run(build, logfile):
 
     group = "Patients"
     for site in ['Exeter', 'Bari', 'Leeds', 'Bordeaux', 'Turku', 'Sheffield']:
-        run_site(os.path.join(datapath, group, site),
+        run_site(build, 
+                 os.path.join(datapath, group, site),
                  os.path.join(maskpath, group, site, EDIT_TASK),
                  os.path.join(kidneyvolpath, group, site),
                  os.path.join(displaypath, group, site),
@@ -133,7 +135,7 @@ def _build_background(arrays, background):
     return arrays[suffix].astype(np.float32)
 
 
-def _process_one_mask(mask, sitedatapath, all_series, all_parenchyma_series,
+def _process_one_mask(build, mask, sitedatapath, all_series, all_parenchyma_series,
                        sitedisplaypath, task, organs, background, needed_suffixes):
     """Process a single mask series: build the mosaic overlay PNG(s) for it.
 
@@ -146,7 +148,7 @@ def _process_one_mask(mask, sitedatapath, all_series, all_parenchyma_series,
     study = mask[2][0]
 
     try:
-        record = data.dixon_record()
+        record = data.dixon_record(build)
         sequence = data.dixon_series_desc(record, patient_id, study)
     except Exception as e:
         return f"ERROR: could not resolve sequence name for {patient_id} {study}: {e}"
@@ -236,7 +238,7 @@ def _process_one_mask(mask, sitedatapath, all_series, all_parenchyma_series,
     return None
 
 
-def run_site(sitedatapath, sitemaskpath, sitekidneyvolpath, sitedisplaypath,
+def run_site(build, sitedatapath, sitemaskpath, sitekidneyvolpath, sitedisplaypath,
              organs=None, task=EDITED_TASK, background=None, n_jobs=None):
     if background is None:
         background = BACKGROUND
@@ -263,7 +265,7 @@ def run_site(sitedatapath, sitemaskpath, sitekidneyvolpath, sitedisplaypath,
 
     results = Parallel(n_jobs=n_jobs)(
         delayed(_process_one_mask)(
-            mask, sitedatapath, all_series, all_parenchyma_series,
+            build, mask, sitedatapath, all_series, all_parenchyma_series,
             sitedisplaypath, task, organs, background, needed_suffixes,
         )
         for mask in tqdm(masks, desc='Displaying masks..')

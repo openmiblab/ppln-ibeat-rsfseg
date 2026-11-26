@@ -36,7 +36,7 @@ import argparse
 import numpy as np
 import nibabel as nib
 
-from utils.display3d import rotating_mosaics_da
+from miblab_plot import rotating_mosaics_da
 
 STAGE = 'stage_15_display3d'
 PIPELINE = 'rsfseg'

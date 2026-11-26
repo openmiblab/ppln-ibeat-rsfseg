@@ -43,7 +43,7 @@ def make_patient_splits(cases, case_to_patient, n_folds=N_FOLDS, seed=SEED):
     return splits
 
 
-def write_splits(raw_dataset, preproc_dataset, results_dataset, force=False):
+def write_splits(build, raw_dataset, preproc_dataset, results_dataset, force=False):
     """Write a patient-grouped splits_final.json for nnU-Net.
 
     Must happen BEFORE training. If training results already exist the
@@ -70,7 +70,7 @@ def write_splits(raw_dataset, preproc_dataset, results_dataset, force=False):
     cases = sorted(f[:-7] for f in os.listdir(labels_dir) if f.endswith('.nii.gz'))
 
     # Same case-id convention as stage 8: f"{patient}_{study}" with spaces -> _
-    record = data.dixon_record()
+    record = data.dixon_record(build)
     case_to_patient = {
         f"{row[1]}_{row[2]}".replace(' ', '_'): row[1] for row in record[1:]
     }
@@ -157,6 +157,7 @@ def run(build, dataset_id="1", force_splits=False):
     # Patient-grouped cross-validation splits, so that repeat visits of the
     # same patient never end up in both training and validation.
     write_splits(
+        build,
         os.path.join(raw_data, DATASET_NAME),
         os.path.join(preproc_data, DATASET_NAME),
         os.path.join(results, DATASET_NAME),

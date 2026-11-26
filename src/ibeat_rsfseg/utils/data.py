@@ -4,8 +4,8 @@ import os
 import csv
 
 
-def dixon_record():
-    record = os.path.join(os.getcwd(), 'data', 'dixon_data.csv')
+def dixon_record(build):
+    record = os.path.join(build, 'dixon', 'stage_7_select', 'dixon_data.csv')
     with open(record, 'r') as file:
         reader = csv.reader(file)
         record = [row for row in reader]

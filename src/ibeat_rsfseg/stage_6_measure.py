@@ -10,9 +10,9 @@ import dbdicom as db
 import vreg
 import pydmr
 from miblab import pipe
+import numpyradiomics as radiomics
 
 from utils import data
-from utils import radiomics
 from utils import rsf_features
 
 PIPELINE = 'rsfseg'
@@ -64,14 +64,14 @@ def run(build, logfile):
     for task in TASKS:
         taskmeasure = os.path.join(measurepath, task)
 
-        measure_task(task,
+        measure_task(build, task,
                      os.path.join(maskpath, 'Controls', task),
                      os.path.join(taskmeasure, 'Controls'),
                      os.path.join(dixonpath, 'Controls'),
                      os.path.join(kidneypath, 'Controls'))
 
         for site in SITES:
-            measure_task(task,
+            measure_task(build, task,
                          os.path.join(maskpath, 'Patients', site, task),
                          os.path.join(taskmeasure, 'Patients', site),
                          os.path.join(dixonpath, 'Patients', site),
@@ -133,7 +133,7 @@ def _jobs(dbd, masks, sitemeasurepath, ctx):
         yield delayed(measure_image)(patient, study, labels, vol.affine, dmr_file, extras)
 
 
-def measure_task(task, sitemaskpath, sitemeasurepath, sitedixonpath, sitekidneypath):
+def measure_task(build, task, sitemaskpath, sitemeasurepath, sitedixonpath, sitekidneypath):
     if not os.path.isdir(sitemaskpath):
         logging.warning(f"{sitemaskpath}: no edited masks found, skipping.")
         return
@@ -147,7 +147,7 @@ def measure_task(task, sitemaskpath, sitemeasurepath, sitedixonpath, sitekidneyp
                    f"moving old index.json {sitemaskpath}")
             logging.info(f"{sitemaskpath}: old index.json moved to index.json.bak")
 
-    ctx = {'record': data.dixon_record(),
+    ctx = {'record': data.dixon_record(build),
            'dixon_dbd': None, 'dixon_index': {},
            'kidney_dbd': None, 'kidney_index': {}}
     try:
@@ -218,16 +218,9 @@ def measure_image(patient, study, labels, affine, dmr_file, extras=None):
         roi_vol = vreg.volume(mask, affine)
 
         try:
-            results = radiomics.volume_features(roi_vol, roi)
+            results = radiomics.shape(roi_vol.values, roi_vol.spacing)
         except Exception as e:
             logging.error(f"Patient {patient} {roi} - error computing ski-shapes: {e}")
-        else:
-            _collect(dmr, patient, study, results)
-
-        try:
-            results = radiomics.shape_features_nprad(roi_vol, roi)
-        except Exception as e:
-            logging.error(f"Patient {patient} {roi} - error computing radiomics-shapes: {e}")
         else:
             _collect(dmr, patient, study, results)
 

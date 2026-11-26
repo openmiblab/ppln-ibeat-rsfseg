@@ -10,7 +10,7 @@ import vreg
 import pydmr
 from miblab import pipe
 
-from utils import radiomics
+import numpyradiomics as radiomics
 
 PIPELINE = 'rsfseg'
 
@@ -69,17 +69,9 @@ def measure_image(automask, sitemeasurepath):
         roi_vol = vreg.volume(mask, vol.affine)
 
         try:
-            results = radiomics.volume_features(roi_vol, roi)
+            results = radiomics.shape(roi_vol.values, roi_vol.spacing)
         except Exception as e:
             logging.error(f"Patient {patient} {roi} - error computing ski-shapes: {e}")
-        else:
-            dmr['data'] |= {p: v[1:] for p, v in results.items()}
-            dmr['pars'] |= {(patient, study, p): v[0] for p, v in results.items()}
-
-        try:
-            results = radiomics.shape_features_nprad(roi_vol, roi)
-        except Exception as e:
-            logging.error(f"Patient {patient} {roi} - error computing radiomics-shapes: {e}")
         else:
             dmr['data'] |= {p: v[1:] for p, v in results.items()}
             dmr['pars'] |= {(patient, study, p): v[0] for p, v in results.items()}
