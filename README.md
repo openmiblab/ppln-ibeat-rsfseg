@@ -288,10 +288,24 @@ This script packages the trained nnU-Net model into a lightweight folder that co
 ```bash
 python -m rsfseg.stage_12_build_contribytion --build=$data 
 ```
-## 🏗️ Stage 12: Build contribution folder
-This script packages the trained nnU-Net model into a lightweight folder that contains only what is needed to run inference. It copies the bare model weights and configuration files from the training output (*stage 10*) into a separate *RSFPredictor* folder, so that the model can be shared or contributed without the large training artefacts.
+## ✅ Stage 13: Test the packaged model (nnU-Net)
+This script tests the model packaged in stage 12, fold by fold. It loads the weights directly with nnUNetPredictor from the *stage 12 folder*, so the weights being tested are the ones trained in *stage 10*. For each fold, it aqpplies the weights of that fold to the validation cases of the same fold, taken from *splits_final.json*. These cases were not used to train that fold. It computes the Dice score per fold, case and class. The Dice is NaN is both masks are empty. It saves mosaic overlays of the label and the prediction on the fat image. 
+*Ensemble* (optional) : combines all 5 folds on the first --n validation cases of the first tested fold. These cases are part of the training data of 4 of the 5 folds, so these scores are optimistic. They only show that the ensemble runs end to end. 
+*n* : Amount of validation cases to test per fold (0 = all). 
 
 ```bash
-python -m rsfseg.stage_12_build_contribytion --build=$data 
+python -m rsfseg.stage_13_test.py --build=$data --n 3 --folds 0 1 2 3 4 --ensemble
 ```
 
+## 🎯 Stage 14: RSF segmentation of the Dixon data
+This script applies the trained renal sinus fat (RSF) model to the cleaned Dixon data of the full cohort, using the *rsf* function from *miblab_dl*. The result is a renal sinus fat label map for each selected scan. 
+
+```bash
+python -m rsfseg.stage_14_rsf_segmentation.py --build=$data
+```
+## 🖥️ Stage 15: 3D Display of RSF masks 
+This script creates rotating 3D displays of the renal sinus fat masks, with the reference (manual label) and the prediction side by side, per fold and per kidney. It reads the predictions from stage 13 and the reference label from stage 8. For each kidney, it makes separate mosaics. The masks are smoothed before display : Gaussian smoothing on the volume and Taubin smoothing on the surface. Set either to 0 to turn it off. Voxel spacing is taken from the Nifti header and cases without a reference label are skipped. 
+
+```bash
+python -m rsfseg.stage_15_displayy3d.py
+```
