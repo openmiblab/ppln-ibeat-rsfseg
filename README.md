@@ -90,15 +90,43 @@ iBEAt_Build/
 │   └── stage_5_clean_dixon_data/
 │       ├── Controls/
 │       └── Patients/
+├── kidneyvol/
+│   └── stage_3_edit/
+│       ├── Controls/
+│       └── Patients/
 └── rsfseg/
     ├── stage_1_segment/
     │   ├── Controls/
     │   └── Patients/
     ├── stage_2_display/
+    │   ├── Controls/
+    │   └── Patients/
     ├── stage_3_measure/
+    │   ├── Controls/
+    │   └── Patients/
     ├── stage_4_edit/
+    │   ├── Controls/
+    │   └── Patients/
     ├── stage_5_display/
-    └── stage_6_measure/
+    │   ├── Controls/
+    │   └── Patients/
+    ├── stage_6_measure/
+    │   ├── Controls/
+    │   └── Patients/
+    ├── stage_8_build_training_data/
+    │   └── Dataset001_iBEAtRSF/
+    ├── stage_9_preprocess/
+    │   └── Dataset001_iBEAtRSF/
+    ├── stage_10_train/
+    │   └── Dataset001_iBEAtRSF/
+    ├── stage_12_build_contribution/
+    ├── stage_13_test/
+    │   ├── fold_0/
+    │   ├── fold_1/
+    │   ├── fold_2/
+    │   ├── fold_3/
+    │   └── fold_4/
+    └── stage_15_display3d/
 ```
 
 **Note**: It is good practice, though not required, to keep data and sofware in separate folders. Do not include data in a software folder or vice versa.
@@ -269,12 +297,18 @@ Data is saved in *stage_9_preprocessed* (preprocessing output and splits_final.j
 
 ---
 ## 🏋️ Stage 10: Training (nnU-Net) 
-This script trains all cross-validation fold of the nnU-Net segmentation model (dataset 001, 3d_fullres configuration) and uses the preprocessed data and the patient-grouped splits_final.json created in stage 9. 
-
+This script trains all cross-validation fold of the nnU-Net segmentation model (dataset 001, 3d_fullres configuration) and uses the preprocessed data and the patient-grouped splits_final.json created in stage 9. It sets the nnU-Net environment variables (*nnUNet_raw*, *nnUNet_preprocessed*, *nnUNet_results*) to the stage 8, 9 and 10 folders inside <build>/rsfseg/. Next, it runs nnUNetv2_train 001 3d_fullres <fold> and streams nnU-Net's output to the console. It logs the start and end of the training to *stage_10_train.log*. Folder structure needed:
+```
+iBEAt_Build/
+└── rsfseg/
+    ├── stage_8_build_training_data/
+    ├── stage_9_preprocess/
+```
 ```bash
 python -m rsfseg.stage_10_train --build=$data --fold all 
 ```
 By changing --fold to 0 - 4 only 1 fold is trained. 
+
 
 ---
 ## 🔍 Stage 11: Find best configuration (nnU-Net) 
